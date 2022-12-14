@@ -6,7 +6,7 @@ Python tools specifically for global applications
 Simple installation instructions
 ```sh
 $> git clone https://github.com/noaa-emc/global-workflow
-$> cd global-workflow/ush/python
+$> cd global-workflow/ush/python/pygw
 $> pip install .
 ```
 

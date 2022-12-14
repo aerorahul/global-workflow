@@ -78,7 +78,8 @@ export use_coldstart=".false."
 
 #######################################################################
 
-export FORECASTSH="$HOMEgfs/scripts/exglobal_forecast.sh"
+#export FORECASTSH="$HOMEgfs/scripts/exglobal_forecast.sh"
+export FORECASTSH="$HOMEgfs/scripts/exglobal_forecast.py"
 export FCSTEXECDIR="$HOMEgfs/exec"
 export FCSTEXEC="ufs_model.x"
 
@@ -93,7 +94,7 @@ export h2o_phys=".true."
 # Options of stratosphere O3 physics reaction coefficients
 export new_o3forc="YES"
 
-export gwd_opt=2  
+export gwd_opt=2
 
 # --GFS.v16 uGWD.v0, used for suite FV3_GFS_v16 and UFS p6 etc
 # do_ugwp=T: use unified CGWD and OGWD, and turbulent orographic form drag (TOFD)
@@ -121,8 +122,8 @@ if [[ "$gwd_opt" -eq 2 ]]; then
     #export  do_gsl_drag_ss=".true."
     #export  do_gsl_drag_tofd=".true."
     #export  do_ugwp_v1_orog_only=".false."
-  
-    #--used for UFS p8 
+
+    #--used for UFS p8
     export knob_ugwp_version=0
     export do_ugwp=".false."
     export do_tofd=".false."
@@ -272,7 +273,7 @@ export FSICS="0"
 export ideflate=1
 export nbits=14
 export ishuffle=0
-# compression for RESTART files written by FMS 
+# compression for RESTART files written by FMS
 export shuffle=1
 export deflate_level=1
 
@@ -289,14 +290,14 @@ if [[ "$CDUMP" == "gdas" ]] ; then # GDAS cycle specific parameters
         export DIAG_TABLE="$HOMEgfs/parm/parm_fv3diag/diag_table_da_orig"
     fi
 
-    # Write restart files, where $number is current model start time. 
+    # Write restart files, where $number is current model start time.
     # restart_interval:        $number
-    #    number=0, writes out restart files at the end of forecast. 
+    #    number=0, writes out restart files at the end of forecast.
     #    number>0, writes out restart files at the frequency of $number and at the end of forecast.
     # restart_interval:        "$number -1"
     #    writes out restart files only once at $number forecast hour.
     # restart_interval:        "$number1 $number2 $number3 ..."
-    #    writes out restart file at the specified forecast hours 
+    #    writes out restart file at the specified forecast hours
     export restart_interval=${restart_interval:-6}
 
     # For IAU, write restarts at beginning of window also
