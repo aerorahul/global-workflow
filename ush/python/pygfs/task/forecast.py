@@ -1,17 +1,20 @@
-class Task:
+from pygw.task import Task
+from pygw.logger import Logger, logit
+
+
+logger = Logger(__name__)
+
+class Forecast(Task):
     """
-    Base class for all tasks
+    UFS-weather-model forecast task
     """
 
     def __init__(self, config, *args, **kwargs):
         """
-        Every task needs a config.
-        Additional arguments (or key-value arguments) can be provided.
-
         Parameters
         ----------
         config : Dict
-                 dictionary object containing task configuration
+                 dictionary object containing configuration from environment
 
         *args : tuple
                 Additional arguments to `Task`
@@ -20,14 +23,8 @@ class Task:
                    Extra keyword arguments to `Task`
         """
 
-        # Store the config and arguments as attributes of the object
-        self.config = config
+        super().__init(config, *args, **kwargs)
 
-        for arg in args:
-            setattr(self, str(arg), arg)
-
-        for key, value in kwargs.items():
-            setattr(self, key, value)
 
     def initialize(self):
         """

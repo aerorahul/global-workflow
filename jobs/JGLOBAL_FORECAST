@@ -5,9 +5,10 @@ source "${HOMEgfs}/ush/preamble.sh"
 ##############################################
 # make temp directory
 ##############################################
-export DATA=${DATA:-${DATAROOT}/${jobid}}
-mkdir -p ${DATA}
-cd ${DATA}
+export DATA=${DATA:-${DATAROOT}/${RUN}fcst_${cyc}}
+[[ -d "${DATA}" ]] && rm -rf "${DATA}"
+mkdir -p "${DATA}"
+cd "${DATA}" || (echo "${DATA} does not exist. ABORT!"; exit 1)
 
 
 ##############################################
@@ -26,6 +27,13 @@ export pgmout="OUTPUT.${pid}"
 export pgmerr=errfile
 
 
+##############################################
+# Set job-wide variables
+##############################################
+export CDATE=${PDY}${cyc}
+export CDUMP=${RUN}
+
+
 #############################
 # Source relevant config files
 #############################
@@ -33,29 +41,29 @@ export EXPDIR=${EXPDIR:-${HOMEgfs}/parm/config}
 configs="base fcst"
 [[ ${DO_WAVE:-"NO"} = "YES" ]] && configs+=" wave"
 for config in ${configs}; do
-    . ${EXPDIR}/config.${config}
+    . "${EXPDIR}/config.${config}"
     status=$?
-    [[ ${status} -ne 0 ]] && exit ${status}
+    [[ "${status}" -ne 0 ]] && exit "${status}"
 done
 
 
 ##########################################
 # Source machine runtime environment
 ##########################################
-. ${HOMEgfs}/env/${machine}.env fcst
+. "${HOMEgfs}/env/${machine}.env" fcst
 status=$?
-[[ ${status} -ne 0 ]] && exit ${status}
+[[ "${status}" -ne 0 ]] && exit "${status}"
 
 
 ##############################################
 # Set variables used in the script
 ##############################################
 # Set wave variables
-if [ ${DO_WAVE:-"NO"} = "YES" ]; then
+if [[ "${DO_WAVE}" = "YES" ]]; then
   # WAVE component directory
   export CDUMPwave=${CDUMPwave:-${CDUMP}wave}
-  export COMINwave=${COMINwave:-$(compath.py ${envir}/${NET}/${gfs_ver})/${CDUMP}.${PDY}/${cyc}/wave}
-  export COMOUTwave=${COMOUTwave:-$(compath.py -o ${NET}/${gfs_ver})/${CDUMP}.${PDY}/${cyc}/wave}
+  export COMINwave=${COMINwave:-$(compath.py "${envir}/${NET}/${gfs_ver})/${CDUMP}.${PDY}/${cyc}/wave"}
+  export COMOUTwave=${COMOUTwave:-$(compath.py -o "${NET}/${gfs_ver})/${CDUMP}.${PDY}/${cyc}/wave"}
 fi
 
 ##############################################
@@ -67,9 +75,9 @@ rCDUMP=${CDUMP}
 [[ ${CDUMP} = "gfs" ]] && export rCDUMP="gdas"
 
 # Forecast length for GFS forecast
-if [ ${CDUMP} = "gfs" ]; then
-    export FHMAX=${FHMAX_GFS}
-    export FHOUT=${FHOUT_GFS}
+if [[ "${CDUMP}" = "gfs" ]]; then
+    export FHMAX=${FHMAX_GFS:-}
+    export FHOUT=${FHOUT_GFS:-}
     export FHMAX_HF=${FHMAX_HF_GFS}
     export FHOUT_HF=${FHOUT_HF_GFS}
 else
@@ -93,15 +101,15 @@ status=$?
 ##############################################
 # Final processing
 ##############################################
-if [ -e "${pgmout}" ] ; then
-  cat ${pgmout}
+if [[ -e "${pgmout}" ]] ; then
+  cat "${pgmout}"
 fi
 
 ##########################################
 # Remove the Temporary working directory
 ##########################################
-cd ${DATAROOT}
-[[ ${KEEPDATA} = "NO" ]] && rm -rf ${DATA}
+cd "${DATAROOT}"
+[[ "${KEEPDATA}" = "NO" ]] && rm -rf "${DATA}"
 
 
 exit 0
