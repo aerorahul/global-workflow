@@ -1,0 +1,88 @@
+fv3_input_nml:
+  INPES: $(layout_x) # layout 1st number
+  JNPES: $(layout_y) # layout 2nd number
+
+# Coldstart/warmstart
+  WARM_START: .false.
+  READ_INCREMENT: .false.
+  NGGPS_IC: .true.
+  EXTERNAL_IC: .true.
+  MAKE_NH: .true.
+  MOUNTAIN: .false.
+  NA_INIT: 1
+
+# Radiation
+  DO_RRTMGP: .false.
+  ICLOUD: 0
+  IAER: 111
+  ICLIQ_SW: 1
+  IOVR: 1
+
+# Physics
+  CCPP_SUITE: $(ccpp_suite)
+
+# Microphysics
+  IMP_PHYSICS: 11
+  NWAT: 6
+# GFDL MP
+  DNATS: 1
+  DO_SAT_ADJ: .true.
+  LHEATSTRG: .false.
+  LGFDLMPRAD: .false.
+  EFFR_IN: .false.
+# Thompson MP
+
+# PBL
+  SATMEDMF: .false.
+  ISATMEDMF: 0
+  HYBEDMF: .true.
+
+# Shallow/deep convection
+# These are hard-wired
+  IMFSHALCNV: 2
+  IMFDEEPCNV: 2
+
+# LSM
+# These are hard-wired
+  LSM: 1
+  IALB: 1
+  IEMS: 1
+
+# Ozone / stratospheric H2O
+  OZ_PHYS_OLD: .true.
+  OZ_PHYS_NEW: .false.
+  H2O_PHYS: .false.
+
+  CPLFLX: .false.
+  CPLWAV: .false.
+  CPLWAV2ATM: .false.
+  NPX: $(npx)
+  NPY: $(npy)
+  NPZ: $(vertical_resolution)
+  NPZP: $(npzp)
+  NSTF_NAME: 2,1,1,0,5
+  FDIAG: 0,1,2,3,4,5,6,7,8,9,10,11,12,15,18,21,24,27,30,33,36,39,42,45,48
+
+# These depend on horizontal_resolution (for now use highest resolution)
+  FNALBC: "global_snowfree_albedo.bosu.t1534.3072.1536.rg.grb"
+  FNVETC: "global_vegtype.igbp.t1534.3072.1536.rg.grb"
+  FNSOTC: "global_soiltype.statsgo.t1534.3072.1536.rg.grb"
+  FNSMCC: "global_soilmgldas.statsgo.t1534.3072.1536.grb"
+  FNABSC: "global_mxsnoalb.uariz.t1534.3072.1536.rg.grb"
+
+# Stochastic physics
+  DO_SPPT: .false.
+  DO_SHUM: .false.
+  DO_SKEB: .false.
+  LNDP_TYPE: 0
+  N_VAR_LNDP: 0
+  LNDP_EACH_STEP: .false.
+  SKEB: -999.
+  SPPT: -999.
+  SHUM: -999.
+
+#IAU
+  IAUFHRS: 0
+  IAU_DELTHRS: 0
+  IAU_INC_FILES: "''"
+  IAU_DRYMASSFIXER: .false.

@@ -1,0 +1,22 @@
+cpl_defaults:  # coupling control switches, OFF (.false.) by default
+  cpl: '.false.'
+  cplflx: '.false.'
+  cplice: '.false.'
+  cplwav: '.false.'
+  cplchm: '.false.'
+cpl_validate:  # [cpl, cplflx, cplice, cplwav, cplchm]
+  atm: ['.false.', '.false.', '.false.', '.false.', '.false.']
+  datm: ['.true.', '.true.', '.false.', '.false.', '.false.']
+  atm_aero: ['.true.', '.false.', '.false.', '.false.', '.true.']
+  med_atm_ocn_ice: ['.true.', '.true.', '.true.', '.false.', '.false.']
+  cpld: ['.true.', '.true.', '.true.', '.false.', '.false.']
+  blocked_atm_wav: ['.true.', '.false.', '.false.', '.true.', '.false.']
+  leapfrog_atm_wavcombination: ['.true.', '.false.', '.false.', '.true.', '.false.']
+  med_atm_ocn_ice_wav: ['.true.', '.true.', '.true.', '.true.', '.false.']
+  cpld_wave: ['.true.', '.true.', '.true.', '.true.', '.false.']
+  cpld_aero_wave: ['.true.', '.true.', '.true.', '.true.', '.true.']
+  medcold_atm_ocn_ice_wav: ['.true.', '.true.', '.true.', '.true.', '.false.']
+  med_atm_ocn_ice_wav1way: ['.true.', '.true.', '.true.', '.true.', '.false.']
+  med_atm_ocn_ice_wav1waywcurr: ['.true.', '.true.', '.true.', '.true.', '.false.']
+  medcold_atm_ocn_ice_wav: ['.true.', '.true.', '.true.', '.true.', '.false.']
+  medcold_atm_ocn_ice: ['.true.', '.true.', '.true.', '.false.', '.false.']

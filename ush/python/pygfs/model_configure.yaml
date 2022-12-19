@@ -1,0 +1,32 @@
+model_configure:
+  SYEAR: '{{year}}'
+  SMONTH: '{{month}}'
+  SDAY: '{{day}}'
+  SHOUR: '{{hour}}'
+  FHMAX: $(forecast_length_hours)
+  FHROT: 0
+  DT_ATMOS: $(model_timestep)
+  RESTART_INTERVAL: 0
+  QUILTING: .true.
+  WRITE_GROUP: 1
+  WRTTASK_PER_GROUP: $(number_of_write_tasks_per_io_group)
+  ITASKS: 1
+  OUTPUT_HISTORY: .true.
+  WRITE_DOPOST: .false.
+  WRITE_NSFLIP: .false.
+  NUM_FILES: 2
+  FILENAME_BASE: "'atm' 'sfc'"
+  OUTPUT_GRID: "cubed_sphere_grid'"
+  OUTPUT_FILE: "netcdf"
+  IDEFLATE: 0
+  NBITS: 0
+  ICHUNK3D: # TODO
+  JCHUNK3D: # TODO
+  KCHUNK3D: # TODO
+  IMO: $(output_nlons) # 384
+  JMO: $(output_nlats) # 192
+  OUTPUT_FH: # TODO
+  IAU_OFFSET: # TODO
+  NFHOUT: 3
+  NFHMAX_HF: 12
+  NFHOUT_HF: 1
