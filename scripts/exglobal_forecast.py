@@ -2,7 +2,7 @@
 
 import os
 from pygw import Logger
-from pygfs.task.forecast import Forecast
+from pygfs.task.gfs_forecast import GFSForecast as Forecast
 
 
 if __name__ == '__main__':

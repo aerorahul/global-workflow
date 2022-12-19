@@ -1,3 +1,6 @@
+from pygw.attrdict import AttrDict
+
+
 class Task:
     """
     Base class for all tasks
@@ -21,7 +24,7 @@ class Task:
         """
 
         # Store the config and arguments as attributes of the object
-        self.config = config
+        self.config = AttrDict(config)
 
         for arg in args:
             setattr(self, str(arg), arg)

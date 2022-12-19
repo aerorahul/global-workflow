@@ -1,12 +1,13 @@
+from pygw.attrdict import AttrDict
 from pygw.task import Task
 from pygw.logger import Logger, logit
 
 
 logger = Logger(__name__)
 
-class Forecast(Task):
+class GFSForecast(Task):
     """
-    UFS-weather-model forecast task
+    UFS-weather-model forecast task for the GFS
     """
 
     def __init__(self, config, *args, **kwargs):
@@ -23,7 +24,9 @@ class Forecast(Task):
                    Extra keyword arguments to `Task`
         """
 
-        super().__init(config, *args, **kwargs)
+        super().__init(AttrDict(config), *args, **kwargs)
+
+        self.runtime_config = None
 
 
     def initialize(self):
