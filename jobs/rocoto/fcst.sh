@@ -14,7 +14,9 @@ export jobid="${job}.$$"
 ###############################################################
 # exglobal_forecast.py requires the following in PYTHONPATH
 # This will be moved to a module load when ready
-export PYTHONPATH="${PYTHONPATH}:${HOMEgfs}/ush/python:${HOMEgfs}/ush/python/pygw/src"
+pygwPATH="${HOMEgfs}/ush/python:${HOMEgfs}/ush/python/pygw/src"
+[[ -n ${PYTHONPATH:-} ]] && PYTHONPATH="${PYTHONPATH}:${pygwPATH}" || PYTHONPATH="${pygwPATH}"
+export PYTHONPATH
 
 ###############################################################
 # Execute the JJOB

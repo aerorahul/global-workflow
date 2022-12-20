@@ -53,12 +53,15 @@ prepend_path("MODULEPATH", pathJoin("/work/noaa/global/glopara/git/prepobs/v1.0.
 load(pathJoin("prepobs", "1.0.1"))
 
 -- Temporary until official hpc-stack is updated
-prepend_path("MODULEPATH", "/work2/noaa/global/wkolczyn/save/hpc-stack/modulefiles/stack")
-load(pathJoin("hpc", "1.2.0"))
-load(pathJoin("hpc-intel", "2018.4"))
-load(pathJoin("hpc-miniconda3", "4.6.14"))
-load(pathJoin("ufswm", "1.0.0"))
-load(pathJoin("met", "9.1"))
-load(pathJoin("metplus", "3.1"))
+--prepend_path("MODULEPATH", "/work2/noaa/global/wkolczyn/save/hpc-stack/modulefiles/stack")
+--load(pathJoin("hpc", "1.2.0"))
+--load(pathJoin("hpc-intel", "2018.4"))
+--load(pathJoin("hpc-miniconda3", "4.6.14"))
+--load(pathJoin("ufswm", "1.0.0"))
+--load(pathJoin("met", "9.1"))
+--load(pathJoin("metplus", "3.1"))
+load(pathJoin("python", "3.7.5"))
+prepend_path("MODULEPATH", "/work2/noaa/stmp/rmahajan/gwWork/pyvenv/modulefiles/python/3.7.5")
+load(pathJoin("pyfcst", "1.0.0"))
 
 whatis("Description: GFS run environment")

@@ -44,4 +44,6 @@ fi
 ulimit -S -s "$ulimit_s"
 unset ulimit_s
 
+module list
+
 set_trace
