@@ -42,8 +42,8 @@ while getopts ":ho" option; do
 done
 shift $((OPTIND-1))
 
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-top_dir=$(cd "$(dirname "${script_dir}")" &> /dev/null && pwd)
+readonly HOMEgfs=$(cd "$(dirname "$(readlink -f -n "${BASH_SOURCE[0]}" )" )/.." && pwd -P)
+script_dir="${HOMEgfs}/sorc"
 cd "${script_dir}"
 
 export COMPILER="intel"
@@ -62,13 +62,19 @@ case "${machine}" in
   "jet")      FIX_DIR="/lfs4/HFIP/hfv3gfs/glopara/git/fv3gfs/fix" ;;
   "s4")       FIX_DIR="/data/prod/glopara/fix" ;;
   *)
-    echo "FATAL: Unknown target machine ${machine}, couldn't set FIX_DIR"
-    exit 1
+    # Allow users to stage their own FIX_DIR on unknown machines
+    # Use at your own risk!
+    if [[ -n "${FIX_DIR:-}" ]]; then
+      echo "Using local FIX_DIR=${FIX_DIR}"
+    else
+      echo "FATAL: Unknown target machine ${machine}, couldn't set FIX_DIR"
+      exit 1
+    fi
     ;;
 esac
 
 # Source fix version file
-source "${top_dir}/versions/fix.ver"
+source "${HOMEgfs}/versions/fix.ver"
 
 LINK="ln -fs"
 SLINK="ln -fs"
@@ -76,14 +82,8 @@ if [[ "${RUN_ENVIR}" == "nco" ]]; then
   LINK="cp -rp"
 fi
 
-# Link post
-[[ -d upp.fd ]] && rm -rf upp.fd
-${LINK} ufs_model.fd/FV3/upp upp.fd
-
-if [[ -n "${FIX_DIR}" ]]; then
-  if [[ ! -d "${top_dir}/fix" ]]; then mkdir "${top_dir}/fix" || exit 1; fi
-fi
-cd "${top_dir}/fix" || exit 1
+# Link fix files
+cd "${HOMEgfs}/fix" || ( echo "${HOMEgfs}/fix" does not exist, ABORT!; exit 1 )
 for dir in aer \
             am \
             chem \
@@ -110,6 +110,18 @@ for dir in aer \
 done
 
 
+#---------------------------------------
+#-- link upp
+#---------------------------------------
+cd "${HOMEgfs}/sorc"
+[[ -d upp.fd ]] && rm -rf upp.fd
+${LINK} ufs_model.fd/FV3/upp upp.fd
+
+
+#---------------------------------------
+#-- link ufs-utils
+#---------------------------------------
+# TODO: Aren't these already linked above albeit, not in ufs_utils.fd/fix
 if [[ -d "${script_dir}/ufs_utils.fd" ]]; then
   cd "${script_dir}/ufs_utils.fd/fix" || exit 1
   ./link_fixdirs.sh "${RUN_ENVIR}" "${machine}" 2> /dev/null
@@ -119,12 +131,12 @@ fi
 #---------------------------------------
 #--add files from external repositories
 #---------------------------------------
-cd "${top_dir}/parm" || exit 1
+cd "${HOMEgfs}/parm" || exit 1
     if [[ -d "${script_dir}/gldas.fd" ]]; then
       [[ -d gldas ]] && rm -rf gldas
       ${LINK} "${script_dir}/gldas.fd/parm" gldas
     fi
-cd "${top_dir}/parm/post" || exit 1
+cd "${HOMEgfs}/parm/post" || exit 1
     for file in postxconfig-NT-GEFS-ANL.txt postxconfig-NT-GEFS-F00.txt postxconfig-NT-GEFS.txt postxconfig-NT-GFS-ANL.txt \
         postxconfig-NT-GFS-F00-TWO.txt postxconfig-NT-GFS-F00.txt postxconfig-NT-GFS-FLUX-F00.txt postxconfig-NT-GFS-FLUX.txt \
         postxconfig-NT-GFS-GOES.txt postxconfig-NT-GFS-TWO.txt postxconfig-NT-GFS-WAFS-ANL.txt postxconfig-NT-GFS-WAFS.txt \
@@ -135,9 +147,9 @@ cd "${top_dir}/parm/post" || exit 1
         ${LINK} "${script_dir}/upp.fd/parm/${file}" .
     done
 
-cd "${top_dir}/scripts" || exit 8
+cd "${HOMEgfs}/scripts" || exit 8
     ${LINK} "${script_dir}/ufs_utils.fd/scripts/exemcsfc_global_sfc_prep.sh" .
-cd "${top_dir}/ush" || exit 8
+cd "${HOMEgfs}/ush" || exit 8
     for file in emcsfc_ice_blend.sh  fv3gfs_driver_grid.sh  fv3gfs_make_orog.sh  global_cycle_driver.sh \
         emcsfc_snow.sh  fv3gfs_filter_topo.sh  global_cycle.sh  fv3gfs_make_grid.sh ; do
         ${LINK} "${script_dir}/ufs_utils.fd/ush/${file}" .
@@ -150,16 +162,16 @@ cd "${top_dir}/ush" || exit 8
 #--add gfs_wafs link if checked out
 if [[ -d "${script_dir}/gfs_wafs.fd" ]]; then
 #-----------------------------------
- cd "${top_dir}/jobs" || exit 1
+ cd "${HOMEgfs}/jobs" || exit 1
      ${LINK} "${script_dir}/gfs_wafs.fd/jobs"/*                         .
- cd "${top_dir}/parm" || exit 1
+ cd "${HOMEgfs}/parm" || exit 1
      [[ -d wafs ]] && rm -rf wafs
     ${LINK} "${script_dir}/gfs_wafs.fd/parm/wafs"                      wafs
- cd "${top_dir}/scripts" || exit 1
+ cd "${HOMEgfs}/scripts" || exit 1
     ${LINK} "${script_dir}/gfs_wafs.fd/scripts"/*                      .
- cd "${top_dir}/ush" || exit 1
+ cd "${HOMEgfs}/ush" || exit 1
     ${LINK} "${script_dir}/gfs_wafs.fd/ush"/*                          .
- cd "${top_dir}/fix" || exit 1
+ cd "${HOMEgfs}/fix" || exit 1
     [[ -d wafs ]] && rm -rf wafs
     ${LINK} "${script_dir}/gfs_wafs.fd/fix"/*                          .
 fi
@@ -169,7 +181,7 @@ fi
 #--add GDASApp fix directory
 #------------------------------
 if [[ -d "${script_dir}/gdas.cd" ]]; then
-  cd "${top_dir}/fix" || exit 1
+  cd "${HOMEgfs}/fix" || exit 1
     [[ ! -d gdas ]] && mkdir -p gdas
     cd gdas || exit 1
     for gdas_sub in bump crtm fv3jedi gsibec; do
@@ -185,7 +197,7 @@ fi
 #--add GDASApp files
 #------------------------------
 if [[ -d "${script_dir}/gdas.cd" ]]; then
-  cd "${top_dir}/ush" || exit 1
+  cd "${HOMEgfs}/ush" || exit 1
     ${LINK} "${script_dir}/gdas.cd/ush/ufsda"                              .
 fi
 
@@ -195,7 +207,7 @@ fi
 #------------------------------
 if [[ -d "${script_dir}/gsi_monitor.fd" ]]; then
 
-  cd "${top_dir}/fix" || exit 1
+  cd "${HOMEgfs}/fix" || exit 1
     [[ ! -d gdas ]] && ( mkdir -p gdas || exit 1 )
     cd gdas || exit 1
     ${LINK} "${script_dir}/gsi_monitor.fd/src/Minimization_Monitor/nwprod/gdas/fix/gdas_minmon_cost.txt"                   .
@@ -205,7 +217,7 @@ if [[ -d "${script_dir}/gsi_monitor.fd" ]]; then
     ${LINK} "${script_dir}/gsi_monitor.fd/src/Radiance_Monitor/nwprod/gdas_radmon/fix/gdas_radmon_base.tar"                .
     ${LINK} "${script_dir}/gsi_monitor.fd/src/Radiance_Monitor/nwprod/gdas_radmon/fix/gdas_radmon_satype.txt"              .
     ${LINK} "${script_dir}/gsi_monitor.fd/src/Radiance_Monitor/nwprod/gdas_radmon/fix/gdas_radmon_scaninfo.txt"            .
-  cd "${top_dir}/parm" || exit 1
+  cd "${HOMEgfs}/parm" || exit 1
     [[ -d mon ]] && rm -rf mon
     mkdir -p mon
     cd mon || exit 1
@@ -220,8 +232,8 @@ fi
 #--link executables
 #------------------------------
 
-if [[ ! -d "${top_dir}/exec" ]]; then mkdir "${top_dir}/exec" || exit 1 ; fi
-cd "${top_dir}/exec" || exit 1
+if [[ ! -d "${HOMEgfs}/exec" ]]; then mkdir "${HOMEgfs}/exec" || exit 1 ; fi
+cd "${HOMEgfs}/exec" || exit 1
 
 for utilexe in fbwndgfs.x gaussian_sfcanl.x gfs_bufr.x regrid_nemsio.x supvit.x syndat_getjtbul.x \
   syndat_maksynrc.x syndat_qctropcy.x tocsbufr.x enkf_chgres_recenter.x \
@@ -434,7 +446,7 @@ cd "${script_dir}" || exit 8
 #------------------------------
 #  copy $HOMEgfs/parm/config/config.base.nco.static as config.base for operations
 #  config.base in the $HOMEgfs/parm/config has no use in development
-cd "${top_dir}/parm/config" || exit 1
+cd "${HOMEgfs}/parm/config" || exit 1
 [[ -s "config.base" ]] && rm -f config.base
 if [[ "${RUN_ENVIR}" == "nco" ]] ; then
   cp -p config.base.nco.static config.base
