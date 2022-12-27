@@ -15,7 +15,7 @@ export jobid="${job}.$$"
 # exglobal_forecast.py requires the following in PYTHONPATH
 # This will be moved to a module load when ready
 pygwPATH="${HOMEgfs}/ush/python:${HOMEgfs}/ush/python/pygw/src"
-[[ -n ${PYTHONPATH:-} ]] && PYTHONPATH="${PYTHONPATH}:${pygwPATH}" || PYTHONPATH="${pygwPATH}"
+PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}${pygwPATH}"
 export PYTHONPATH
 
 ###############################################################
