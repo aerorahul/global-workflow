@@ -7,6 +7,8 @@ __pycache__
 *.sw[a-p]
 .DS_Store
 .idea/
+.vscode/
+._*
 
 # Ignore editor generated backup files
 #-------------------------------------

@@ -1,4 +1,10 @@
+import logging
+from typing import Dict, List
+
 from pygw.attrdict import AttrDict
+from pygw.logger import logit
+
+logger = logging.getLogger(__name__.split('.')[-1])
 
 
 class Task:
@@ -31,6 +37,15 @@ class Task:
 
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+        # Pull out basic runtime keys values into its own runtime config
+        runtime_keys = ['PDY', 'cyc', 'DATA', 'RUN', 'CDUMP']  # TODO: eliminate CDUMP and use RUN instead
+        try:
+            self.runtime_config = AttrDict(
+                (kk, config[kk]) for kk in runtime_keys)
+        except KeyError:
+            raise KeyError(
+                f"Encountered an unreferenced runtime_key in 'config'")
 
     def initialize(self):
         """

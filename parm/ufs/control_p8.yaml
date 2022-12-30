@@ -1,0 +1,2 @@
+copy:
+  - [$(FIX_fv3)/$(atm_res).vegetation_type.tile1.nc, ${DATA}/$(atm_res).vegetation_type.tile1.nc]
