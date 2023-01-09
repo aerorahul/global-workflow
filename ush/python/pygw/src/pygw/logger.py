@@ -227,17 +227,19 @@ class Logger:
 
 def logit(logger, name=None, message=None):
     """
-    Add logging to a function.
+    Logger decorator to add logging to a function.
+    Simply add:
+    @logit(logger) before any function
     Parameters
     ----------
-        logger  : Logger
-                  Logger object
-        name    : str
-                  Name of the module to be logged
-                  default: __module__
-        message : str
-                  Name of the function to be logged
-                  default: __name__
+    logger  : Logger
+              Logger object
+    name    : str
+              Name of the module to be logged
+              default: __module__
+    message : str
+              Name of the function to be logged
+              default: __name__
     """
 
     def decorate(func):
@@ -250,12 +252,10 @@ def logit(logger, name=None, message=None):
 
             passed_args = [repr(aa) for aa in args]
             passed_kwargs = [f"{kk}={repr(vv)}" for kk, vv in list(kwargs.items())]
-            call_msg = 'BEGIN: ' + log_msg
 
+            call_msg = 'BEGIN: ' + log_msg
             logger.info(call_msg)
             logger.debug(f"( {', '.join(passed_args + passed_kwargs)} )")
-
-            # Begin the logging with printing input arguments
 
             # Call the function
             retval = func(*args, **kwargs)
@@ -263,7 +263,7 @@ def logit(logger, name=None, message=None):
             # Close the logging with printing the return val
             ret_msg = '  END: ' + log_msg
             logger.info(ret_msg)
-            logger.debug(f" returning {retval}")
+            logger.debug(f" returning: {retval}")
 
             return retval
 
