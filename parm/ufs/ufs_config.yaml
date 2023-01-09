@@ -1,0 +1,3 @@
+app:
+  ATM: control_p8.yaml
+  S2SWA: cpld_control_p8.yaml

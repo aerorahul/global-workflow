@@ -21,11 +21,7 @@ class UFSWM:
         # ufs_config = config.get('UFS_CONFIG_FILE')
         # ufs_yaml = YAMLFile(ufs_config)
 
-        cres = config.atm_res
-        nlevs = config.atm_levs
-
-        self.atm = self._setup_atm(atm_res=cres, atm_levs=nlevs)
-        pprint(self.atm)
+        self.atm = self._setup_atm(atm_res=config.atm_res, atm_levs=config.atm_levs)
         # self.restart_interval = self.get_restart_interval()
         # pprint(self.restart_interval)
 
@@ -37,13 +33,13 @@ class UFSWM:
         atm.ntiles = ntiles
 
         # FV3 specific variables
-        atm.cres = atm_res
-        atm.res = int(atm.cres[1:])
-        atm.jcap = 2 * atm.res - 2
-        atm.lonb = 4 * atm.res
-        atm.latb = 2 * atm.res
-        atm.npx = atm.res + 1
-        atm.npy = atm.res + 1
+        atm.res = atm_res
+        _res = int(atm_res[1:])
+        atm.jcap = 2 * _res - 2
+        atm.lonb = 4 * _res
+        atm.latb = 2 * _res
+        atm.npx = _res + 1
+        atm.npy = _res + 1
         atm.npz = atm_levs - 1
 
         return atm
