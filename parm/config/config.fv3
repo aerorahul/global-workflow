@@ -6,7 +6,7 @@
 # This config sets default variables for FV3 for a given resolution
 # User can over-ride after sourcing this config file
 
-if [ $# -ne 1 ]; then
+if [[ $# -ne 1 ]]; then
 
     echo "Must specify an input resolution argument to set variables!"
     echo "argument can be any one of the following:"
@@ -160,7 +160,7 @@ if [[ "${WRTTASK_PER_GROUP}" -gt "${npe_node_max}" ]]; then export WRTTASK_PER_G
 if [[ "${WRTTASK_PER_GROUP_GFS}" -gt "${npe_node_max}" ]]; then export WRTTASK_PER_GROUP_GFS=${npe_node_max} ; fi
 
 # Calculate chunksize based on resolution
-export RESTILE=$(echo ${case_in} |cut -c2-)
+export RESTILE=$(echo "${case_in}" |cut -c2-)
 export ichunk2d=$((4*RESTILE))
 export jchunk2d=$((2*RESTILE))
 export ichunk3d=$((4*RESTILE))
