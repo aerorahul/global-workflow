@@ -1,12 +1,19 @@
 #!/bin/bash
 
-set -u
+set -eu
 
 apply_shellcheck() {
   local filename=${1:?}
   local code=${2:-""}
   echo "Applying ${code} on ${filename}"
-  shellcheck -i "${code}" "${filename}" -f diff | git apply
+  patch="/tmp/patch.${RANDOM}"  # Do not use PWD, as this will create tons of patch files
+  [[ -f "${patch}" ]] && rm -f "${patch}"
+  shellcheck -i "${code}" "${filename}" -f diff > "${patch}"
+  rc=$?
+  if [[ "${rc}" -ne 0 ]]; then
+    git apply "${patch}"
+  fi
+  rm -f "${patch}"
 }
 
 file=${1:?}  # File to fix shellcheck errors
