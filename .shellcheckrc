@@ -11,3 +11,17 @@ disable=SC1090
 
 # Disable non-existent binary
 disable=SC1091
+
+##############################################################
+# A list of commonly raised error codes:
+# SC2292 - Prefer [[ ]] over [ ] for tests in Bash/Ksh.
+# SC2250 - Prefer putting braces around variable e.g. ${variable} references even when not strictly required.
+# SC2248 - Prefer double quoting e.g. "" even when variables don't contain special characters.  Applying this automatically will apply the "Minimal" quoting.  This will satisfy the linter, but makes the code a little unreadable.  The "Canonical Quoting" cannot be applied automatically, and it is encouraged for the developer to make their code readable and consistent with the project.
+# SC2086 - Double quote to prevent globbing and word splitting. E.g. Prefer "${DATA}/fcst.12345/INPUT" over "${DATA}"/fcst.12345/INPUT and ${DATA}/fcst.12345/INPUT
+
+# Easy way to quickly fix an error code SCXXXX in filename (assumes shellcheck is installed)
+# shellcheck -i SCXXXX -f diff filename | git apply
+
+# A helper script is included in .github/scripts/apply_shellcheck.sh that applies the above fixes in one pass (assumes shellcheck is installed)
+# Usage:
+# $> ./.github/scripts/apply_shellcheck.sh filename
