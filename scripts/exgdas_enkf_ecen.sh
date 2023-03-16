@@ -24,6 +24,7 @@ pwd=$(pwd)
 
 # Base variables
 CDATE=${CDATE:-"2010010100"}
+CDUMP=${CDUMP:-"gdas"}
 DONST=${DONST:-"NO"}
 export CASE=${CASE:-384}
 ntiles=${ntiles:-6}
@@ -46,10 +47,9 @@ CALCINCNCEXEC=${CALCINCEXEC:-$HOMEgfs/exec/calc_increment_ens_ncio.x}
 OPREFIX=${OPREFIX:-""}
 OSUFFIX=${OSUFFIX:-""}
 APREFIX=${APREFIX:-""}
-APREFIX_ENKF=${APREFIX_ENKF:-$APREFIX}
-ASUFFIX=${ASUFFIX:-$SUFFIX}
+APREFIX_ENS=${APREFIX_ENS:-$APREFIX}
 GPREFIX=${GPREFIX:-""}
-GSUFFIX=${GSUFFIX:-$SUFFIX}
+GPREFIX_ENS=${GPREFIX_ENS:-$GPREFIX}
 
 # Variables
 NMEM_ENKF=${NMEM_ENKF:-80}
@@ -60,8 +60,11 @@ FHMIN=${FHMIN_ECEN:-3}
 FHMAX=${FHMAX_ECEN:-9}
 FHOUT=${FHOUT_ECEN:-3}
 FHSFC=${FHSFC_ECEN:-$FHMIN}
-DO_CALC_INCREMENT=${DO_CALC_INCREMENT:-"NO"}
-
+if [ $CDUMP = "enkfgfs" ]; then
+   DO_CALC_INCREMENT=${DO_CALC_INCREMENT_ENKF_GFS:-"NO"}
+else
+   DO_CALC_INCREMENT=${DO_CALC_INCREMENT:-"NO"}
+fi
 
 # global_chgres stuff
 CHGRESNEMS=${CHGRESNEMS:-$HOMEgfs/exec/enkf_chgres_recenter.x}
@@ -107,32 +110,32 @@ for FHR in $(seq $FHMIN $FHOUT $FHMAX); do
 
 for imem in $(seq 1 $NMEM_ENKF); do
    memchar="mem"$(printf %03i $imem)
-   $NLN $COMIN_GES_ENS/$memchar/atmos/${GPREFIX}atmf00${FHR}${ENKF_SUFFIX}$GSUFFIX ./atmges_$memchar
+   $NLN $COMIN_GES_ENS/$memchar/atmos/${GPREFIX_ENS}atmf00${FHR}${ENKF_SUFFIX}.nc ./atmges_$memchar
    if [ $DO_CALC_INCREMENT = "YES" ]; then
       if [ $FHR -eq 6 ]; then
-         $NLN $COMIN_ENS/$memchar/atmos/${APREFIX_ENKF}atmanl$ASUFFIX ./atmanl_$memchar
+         $NLN $COMIN_ENS/$memchar/atmos/${APREFIX_ENS}atmanl.nc ./atmanl_$memchar
       else
-         $NLN $COMIN_ENS/$memchar/atmos/${APREFIX_ENKF}atma00${FHR}$ASUFFIX ./atmanl_$memchar
+         $NLN $COMIN_ENS/$memchar/atmos/${APREFIX_ENS}atma00${FHR}.nc ./atmanl_$memchar
       fi
    fi
    mkdir -p $COMOUT_ENS/$memchar
    if [ $FHR -eq 6 ]; then
-      $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX}atminc.nc ./atminc_$memchar
+      $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX_ENS}atminc.nc ./atminc_$memchar
    else
-      $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX}atmi00${FHR}.nc ./atminc_$memchar
+      $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX_ENS}atmi00${FHR}.nc ./atminc_$memchar
    fi
    if [[ $RECENTER_ENKF = "YES" ]]; then
       if [ $DO_CALC_INCREMENT = "YES" ]; then
          if [ $FHR -eq 6 ]; then
-            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX}ratmanl$ASUFFIX ./ratmanl_$memchar
+            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX_ENS}ratmanl.nc ./ratmanl_$memchar
          else
-            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX}ratma00${FHR}$ASUFFIX ./ratmanl_$memchar
+            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX_ENS}ratma00${FHR}.nc ./ratmanl_$memchar
          fi
      else
          if [ $FHR -eq 6 ]; then
-            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX}ratminc$ASUFFIX ./ratminc_$memchar
+            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX_ENS}ratminc.nc ./ratminc_$memchar
          else
-            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX}ratmi00${FHR}$ASUFFIX ./ratminc_$memchar
+            $NLN $COMOUT_ENS/$memchar/atmos/${APREFIX_ENS}ratmi00${FHR}.nc ./ratminc_$memchar
          fi
      fi
    fi
@@ -141,9 +144,9 @@ done
 if [ $DO_CALC_INCREMENT = "YES" ]; then
    # Link ensemble mean analysis
    if [ $FHR -eq 6 ]; then
-      $NLN $COMIN_ENS/${APREFIX_ENKF}atmanl.ensmean$ASUFFIX ./atmanl_ensmean
+      $NLN $COMIN_ENS/${APREFIX_ENS}atmanl.ensmean.nc ./atmanl_ensmean
    else
-      $NLN $COMIN_ENS/${APREFIX_ENKF}atma00${FHR}.ensmean$ASUFFIX ./atmanl_ensmean
+      $NLN $COMIN_ENS/${APREFIX_ENS}atma00${FHR}.ensmean.nc ./atmanl_ensmean
    fi
 
    # Compute ensemble mean analysis
@@ -161,9 +164,9 @@ if [ $DO_CALC_INCREMENT = "YES" ]; then
 else
    # Link ensemble mean increment
    if [ $FHR -eq 6 ]; then
-      $NLN $COMIN_ENS/${APREFIX_ENKF}atminc.ensmean$ASUFFIX ./atminc_ensmean
+      $NLN $COMIN_ENS/${APREFIX_ENS}atminc.ensmean.nc ./atminc_ensmean
    else
-      $NLN $COMIN_ENS/${APREFIX_ENKF}atmi00${FHR}.ensmean$ASUFFIX ./atminc_ensmean
+      $NLN $COMIN_ENS/${APREFIX_ENS}atmi00${FHR}.ensmean.nc ./atminc_ensmean
    fi
 
    # Compute ensemble mean increment
@@ -180,8 +183,8 @@ else
    export err=$?; err_chk
 
    # If available, link to ensemble mean guess.  Otherwise, compute ensemble mean guess
-   if [ -s $COMIN_GES_ENS/${GPREFIX}atmf00${FHR}.ensmean$GSUFFIX ]; then
-       $NLN $COMIN_GES_ENS/${GPREFIX}atmf00${FHR}.ensmean$GSUFFIX ./atmges_ensmean
+   if [ -s $COMIN_GES_ENS/${GPREFIX_ENS}atmf00${FHR}.ensmean.nc ]; then
+       $NLN $COMIN_GES_ENS/${GPREFIX_ENS}atmf00${FHR}.ensmean.nc ./atmges_ensmean
    else
        DATAPATH="./"
        ATMGESNAME="atmges"
@@ -216,11 +219,11 @@ if [ $RECENTER_ENKF = "YES" ]; then
 
    # GSI EnVar analysis
    if [ $FHR -eq 6 ]; then
-     ATMANL_GSI=$COMIN/${APREFIX}atmanl$ASUFFIX
-     ATMANL_GSI_ENSRES=$COMIN/${APREFIX}atmanl.ensres$ASUFFIX
+     ATMANL_GSI=$COMIN/${APREFIX}atmanl.nc
+     ATMANL_GSI_ENSRES=$COMIN/${APREFIX}atmanl.ensres.nc
    else
-     ATMANL_GSI=$COMIN/${APREFIX}atma00${FHR}$ASUFFIX
-     ATMANL_GSI_ENSRES=$COMIN/${APREFIX}atma00${FHR}.ensres$ASUFFIX
+     ATMANL_GSI=$COMIN/${APREFIX}atma00${FHR}.nc
+     ATMANL_GSI_ENSRES=$COMIN/${APREFIX}atma00${FHR}.ensres.nc
    fi
 
    # if we already have a ensemble resolution GSI analysis then just link to it
@@ -233,15 +236,9 @@ if [ $RECENTER_ENKF = "YES" ]; then
       $NLN $ATMANL_GSI        atmanl_gsi
       $NLN $ATMANL_GSI_ENSRES atmanl_gsi_ensres
       SIGLEVEL=${SIGLEVEL:-${FIXgsm}/global_hyblev.l${LEVS}.txt}
-      if [ ${SUFFIX} = ".nc" ]; then
-         $NLN $CHGRESNC chgres.x
-         chgresnml=chgres_nc_gauss.nml
-         nmltitle=chgres
-      else
-         $NLN $CHGRESNEMS chgres.x
-         chgresnml=fort.43
-         nmltitle=nam
-      fi
+      $NLN $CHGRESNC chgres.x
+      chgresnml=chgres_nc_gauss.nml
+      nmltitle=chgres
 
       export OMP_NUM_THREADS=$NTHREADS_CHGRES
 
@@ -318,18 +315,13 @@ if [ $DO_CALC_INCREMENT = "YES" ]; then
    fi
 
    export OMP_NUM_THREADS=$NTHREADS_CALCINC
-   if [ ${SUFFIX} = ".nc" ]; then
-      CALCINCEXEC=$CALCINCNCEXEC
-   else
-      CALCINCEXEC=$CALCINCNEMSEXEC
-   fi
+   CALCINCEXEC=$CALCINCNCEXEC
 
    export pgm=$CALCINCEXEC
    . prep_step
 
    $NCP $CALCINCEXEC $DATA
-
-   rm calc_increment.nml
+   [[ -f calc_increment.nml ]] && rm calc_increment.nml
    cat > calc_increment.nml << EOF
 &setup
   datapath = './'
@@ -359,4 +351,4 @@ cd $pwd
 [[ $mkdata = "YES" ]] && rm -rf $DATA
 
 
-exit $err
+exit ${err}

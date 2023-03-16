@@ -1,58 +1,7 @@
 #! /usr/bin/env bash
 
 source "${HOMEgfs}/ush/preamble.sh"
-
-##############################################
-# make temp directory
-##############################################
-export DATA=${DATA:-${DATAROOT}/${RUN}fcst_${cyc}}
-[[ -d "${DATA}" ]] && rm -rf "${DATA}"
-mkdir -p "${DATA}"
-cd "${DATA}" || (echo "${DATA} does not exist. ABORT!"; exit 1)
-
-
-##############################################
-# Run setpdy and initialize PDY variables
-##############################################
-export cycle="t${cyc}z"
-setpdy.sh
-. ./PDY
-
-
-##############################################
-# Determine Job Output Name on System
-##############################################
-export pid=${pid:-$$}
-export pgmout="OUTPUT.${pid}"
-export pgmerr=errfile
-
-
-##############################################
-# Set job-wide variables
-##############################################
-export CDATE=${PDY}${cyc}
-export CDUMP=${RUN}
-
-
-#############################
-# Source relevant config files
-#############################
-export EXPDIR=${EXPDIR:-${HOMEgfs}/parm/config}
-configs="base fcst"
-for config in ${configs}; do
-    . "${EXPDIR}/config.${config}"
-    status=$?
-    [[ "${status}" -ne 0 ]] && exit "${status}"
-done
-
-
-##########################################
-# Source machine runtime environment
-##########################################
-. "${HOMEgfs}/env/${machine}.env" fcst
-status=$?
-[[ "${status}" -ne 0 ]] && exit "${status}"
-
+source "${HOMEgfs}/ush/jjob_header.sh" -e "fcst" -c "base fcst"
 
 ##############################################
 # Set variables used in the script

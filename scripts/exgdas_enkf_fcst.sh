@@ -48,7 +48,7 @@ export DIAG_TABLE=${DIAG_TABLE_ENKF:-${DIAG_TABLE:-$PARM_FV3DIAG/diag_table_da}}
 
 # Cycling and forecast hour specific parameters
 export CDATE=${CDATE:-"2001010100"}
-export CDUMP=${CDUMP:-"gdas"}
+export CDUMP=${CDUMP:-"enkfgdas"}
 
 # Re-run failed members, or entire group
 RERUN_EFCSGRP=${RERUN_EFCSGRP:-"YES"}
@@ -60,7 +60,6 @@ export PREFIX_ATMINC=${PREFIX_ATMINC:-""}
 # Ops related stuff
 SENDECF=${SENDECF:-"NO"}
 SENDDBN=${SENDDBN:-"NO"}
-GSUFFIX=${GSUFFIX:-$SUFFIX}
 
 ################################################################################
 # Preprocessing
@@ -108,11 +107,13 @@ export LEVS=${LEVS_ENKF:-${LEVS:-64}}
 
 # nggps_diag_nml
 export FHOUT=${FHOUT_ENKF:-3}
-
+if [[ ${CDUMP} == "enkfgfs" ]]; then
+    export FHOUT=${FHOUT_ENKF_GFS:-${FHOUT_ENKF:${FHOUT:-3}}}
+fi
 # model_configure
 export DELTIM=${DELTIM_ENKF:-${DELTIM:-225}}
 export FHMAX=${FHMAX_ENKF:-9}
-if [[ $CDUMP == "gfs" ]]; then
+if [[ $CDUMP == "enkfgfs" ]]; then
    export FHMAX=${FHMAX_ENKF_GFS:-${FHMAX_ENKF:-${FHMAX}}}
 fi
 
@@ -135,10 +136,6 @@ export FHCYC=${FHCYC_ENKF:-${FHCYC:-6}}
 if [ $RECENTER_ENKF = "YES" ]; then
    export PREFIX_ATMINC="r"
 fi
-
-# APRUN for different executables
-export APRUN_FV3=${APRUN_FV3:-${APRUN:-""}}
-export NTHREADS_FV3=${NTHREADS_FV3:-${NTHREADS:-1}}
 
 ################################################################################
 # Run forecast for ensemble member
@@ -185,7 +182,7 @@ for imem in $(seq $ENSBEG $ENSEND); do
      while [ $fhr -le $FHMAX ]; do
        FH3=$(printf %03i $fhr)
        if [ $(expr $fhr % 3) -eq 0 ]; then
-         $DBNROOT/bin/dbn_alert MODEL GFS_ENKF $job $COMOUT/$memchar/atmos/${CDUMP}.t${cyc}z.sfcf${FH3}${GSUFFIX}
+         $DBNROOT/bin/dbn_alert MODEL GFS_ENKF $job $COMOUT/$memchar/atmos/${CDUMP}.t${cyc}z.sfcf${FH3}.nc
        fi
        fhr=$((fhr+FHOUT))
      done

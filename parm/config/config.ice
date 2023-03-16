@@ -1,4 +1,5 @@
 #! /usr/bin/env bash
 
-export NX_GLB="1440"
-export NY_GLB="1080"
+echo "BEGIN: config.ice"
+
+echo "END: config.ice"
