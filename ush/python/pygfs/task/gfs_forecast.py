@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Dict, List
 
 from pprint import pprint
 from pygw.attrdict import AttrDict
@@ -59,7 +60,7 @@ class GFSForecast(Task):
         self._configure_nems_configure()
         self._configure_input_nml()
 
-        #self._stage_ics()  # TODO: should stage_ics be here or in ufswm.py?
+        # self._stage_ics()  # TODO: should stage_ics be here or in ufswm.py?
 
     @logit(logger)
     def execute(self):
@@ -86,17 +87,6 @@ class GFSForecast(Task):
     def _get_ufs_config(self):
 
         cfg = AttrDict()
-        cfg.atm_res = self.config.get('CASE')
-        cfg.atm_levs = self.config.get('LEVS')
-
-        cfg.ocn_res = self.config.get('OCNRES')
-        cfg.ice_res = self.config.get('ICERES')
-
-        cfg.fhmax = self.config.FHMAX
-
-        cfg.do_iau = self.config.get('DOIAU', False)
-        if cfg.do_iau:
-            cfg.iau_offset = self.config.get('IAU_OFFSET', 6)
 
         # Get fix files
         FIX_dir = os.path.join(self.config.HOMEgfs, 'fix')
@@ -106,10 +96,25 @@ class GFSForecast(Task):
         cfg.FIX_ugwd = os.path.join(FIX_dir, 'ugwd')
         cfg.FIX_lut = os.path.join(FIX_dir, 'lut')
 
+        # Get and read the relevant config yaml file
         cfg.ufs_config_yaml = self.config.UFS_CONFIG_YAML
         cfg.ufs_config_dict = YAMLFile(path=cfg.ufs_config_yaml)
 
+        # Get and set static parameters
+        cfg.atm_levs = self.config.get('LEVS')
+        cfg.atm_res = self.config.get('CASE')
+        cfg.ocn_res = self.config.get('OCNRES')
+        cfg.ice_res = self.config.get('ICERES')
+
+        cfg.fhmax = self.config.FHMAX
+
+        cfg.do_iau = self.config.get('DOIAU', False)
+        if cfg.do_iau:
+            cfg.iau_offset = self.config.get('IAU_OFFSET', 6)
+
         return cfg
+
+
 
     @logit(logger)
     def stage(self):
@@ -127,7 +132,7 @@ class GFSForecast(Task):
         FileHandler(stage_data).sync()
 
         # Stage static and fix data to $(DATA)
-        self._stage_fix()
+        # self._stage_fix()  # TODO: temporarily disable copying fix files to speed up testing.
 
         # Stage diag_table.tmpl to $(DATA)
         self._stage_tables(table='diag_table', target='diag_table.tmpl')

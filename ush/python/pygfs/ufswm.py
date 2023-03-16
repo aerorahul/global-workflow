@@ -2,7 +2,7 @@ import os
 import re
 import logging
 from pprint import pprint
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from pygw.attrdict import AttrDict
 from pygw.yaml_file import YAMLFile
@@ -21,7 +21,8 @@ class UFSWM:
         # ufs_config = config.get('UFS_CONFIG_FILE')
         # ufs_yaml = YAMLFile(ufs_config)
 
-        self.atm = self._setup_atm(atm_res=config.atm_res, atm_levs=config.atm_levs)
+        self.atm = self._setup_atm(
+            atm_res=config.atm_res, atm_levs=config.atm_levs)
         # self.restart_interval = self.get_restart_interval()
         # pprint(self.restart_interval)
 
@@ -60,6 +61,7 @@ class UFSWM:
 
         cdump = self.runtime_config.get('CDUMP', 'gdas')
         do_iau = self.config.do_iau
+        offset = self.config.iau_offset
 
         restart_interval = None
 
@@ -69,12 +71,25 @@ class UFSWM:
         if cdump in ['gfs']:
             rint = self.config.get('restart_interval_gfs', 12)
             fhmax = self.config.get('FHMAX_GFS', 120)
-            restart_interval = [nn for nn in range(rint, fhmax, rint)]
-            if do_iau:
-                restart_interval = [
-                    xx - self.config.iau_offset for xx in restart_interval]
+            restart_interval = self.get_restart_interval_hours(rint, fhmax, offset)
 
         return restart_interval
+
+    def get_time_vars(self):
+
+        fhmin = self.config.get('FHMIN', 0)
+        fhout_hf = self.config.get('FHOUT_HF', 0)
+        fhmax_hf = self.config.get('FHMAX_HF', 0)
+        fhmax = self.config.get('FHMAX')
+        fhout = self.config.get('FHOUT')
+
+        output_fhrs = self.get_output_hours(fhmin, fhmax_hf, fhout_hf, fhmax, fhout)
+        offset = self.config.iau_offset
+        fhrot = int(offset / 2.)
+        restart_interval = self.get_restart_interval(self.config.restart_interval, fhmax, offset)
+
+
+        return None
 
     @logit(logger)
     def get_restart_time(self):
@@ -128,3 +143,102 @@ class UFSWM:
         ics = warm_ics if self.warm_start else cold_ics
 
         return ics
+
+    @staticmethod
+    def model_configure_defaults() -> AttrDict:
+        cfg = AttrDict()
+        return cfg
+
+    def setup_model_configure(self):
+        """
+        return dictionary extracting elements for model_configure
+        """
+
+        model_configure_yaml = os.path.join(
+            self.config.HOMEgfs, 'parm/ufs/model_configure.yaml')
+        cfg = YAMLFile(path=model_configure_yaml)
+
+        def _to_F90Bool(logical):
+            return ".true." if logical else ".false."
+
+        cfg = AttrDict()
+
+        cfg.QUILTING = _to_F90Bool(self.config.QUILTING)
+        cfg.WRITE_GROUP = self.config.WRITE_GROUP
+        cfg.WRTTASK_PER_GROUP = self.config.WRTTASK_PER_GROUP
+        cfg.ITASKS = 1
+        cfg.IDEFLATE = 1
+        # There is no use case where this is .false.
+        cfg.OUTPUT_HISTORY = ".true."
+        cfg.WRITE_DOPOST = _to_F90Bool(self.config.WRITE_DOPOST)
+        cfg.WRITE_NSFLIP = ".true."
+
+        cfg.NUM_FILES = self.config.
+        cfg. = self.config.
+        cfg. = self.config.
+        cfg. = self.config.
+        cfg. = self.config.
+        cfg. = self.config.
+
+        return None
+
+    @staticmethod
+    def get_output_hours(fhmin: int, fhmax_hf: int, fhout_hf: int, fhmax: int, fhout: int) -> List:
+        """
+        Return a list of forecast hours given bounds and high and low frequency output
+
+        Parameters
+        ----------
+        fhmin : int
+           Minimum forecast hour (typically 0)
+        fhmax_hf : int
+            Maximum forecast hour for high frequency output
+        fhout_hf : int
+            Forecast interval for high frequency output
+            Interval must be > 0
+        fhmax : int
+            Maximum forecast length
+        fhout : int
+            Forecast interval for low (regular) frequency output
+            Interval must be > 0
+
+        Returns
+        -------
+        List
+            List of forecast hours at which forecast will be output
+        """
+
+        if 0 in (fhout, fhout_hf):
+            raise ValueError(
+                f'Forecast output frequency fhout={fhout}, fhout_hf={fhout_hf} cannot be 0')
+
+        fhrs_hf = range(fhmin, fhmax_hf + fhout_hf, fhout_hf)
+        fhrs_lf = range(fhrs_hf[-1] + fhout, fhmax + fhout, fhout)
+        fhrs = list(fhrs_hf) + list(fhrs_lf)
+
+        return fhrs
+
+    @staticmethod
+    def get_restart_interval_hours(interval: int, fhmax: int, offset: int = 0) -> List:
+        """
+        Return a list of forecast hours at which to write out restarts
+
+        Parameters
+        ----------
+        interval : int
+            Interval between restarts
+        fhmax : int
+            Maximum forecast length
+        offset : int
+            Offset from the interval to start the list, by default 0
+
+        Returns
+        -------
+        List
+            List of forecast hours at which restarts will be written out
+        """
+
+        start = interval + int(offset / 2.)  # This assumes offset bisects the window and should be even
+        restart_interval = range(start, fhmax, interval)
+
+        return list(restart_interval)
