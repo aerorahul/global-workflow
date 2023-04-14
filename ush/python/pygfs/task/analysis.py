@@ -5,8 +5,9 @@ from logging import getLogger
 from netCDF4 import Dataset
 from typing import List, Dict, Any
 
-from pygw.yaml_file import YAMLFile
+from pygw.yaml_file import YAMLFile, parse_j2yaml
 from pygw.file_utils import FileHandler
+from pygw.template import Template, TemplateConstants
 from pygw.logger import logit
 from pygw.task import Task
 
@@ -31,6 +32,10 @@ class Analysis(Task):
         obs_dict = self.get_obs_dict()
         FileHandler(obs_dict).sync()
 
+        # some analyses need to stage bias corrections
+        bias_dict = self.get_bias_dict()
+        FileHandler(bias_dict).sync()
+
     @logit(logger)
     def get_obs_dict(self: Task) -> Dict[str, Any]:
         """Compile a dictionary of observation files to copy
@@ -47,19 +52,59 @@ class Analysis(Task):
         obs_dict: Dict
             a dictionary containing the list of observation files to copy for FileHandler
         """
-        obs_list_config = YAMLFile(path=self.config['OBS_LIST'])
+        logger.debug(f"OBS_LIST: {self.task_config['OBS_LIST']}")
+        obs_list_config = parse_j2yaml(self.task_config["OBS_LIST"], self.task_config)
+        logger.debug(f"obs_list_config: {obs_list_config}")
         # get observers from master dictionary
         observers = obs_list_config['observers']
         copylist = []
         for ob in observers:
             obfile = ob['obs space']['obsdatain']['engine']['obsfile']
             basename = os.path.basename(obfile)
-            copylist.append([os.path.join(self.config['COMIN_OBS'], basename), obfile])
+            copylist.append([os.path.join(self.task_config['COMIN_OBS'], basename), obfile])
         obs_dict = {
             'mkdir': [os.path.join(self.runtime_config['DATA'], 'obs')],
             'copy': copylist
         }
         return obs_dict
+
+    @logit(logger)
+    def get_bias_dict(self: Task) -> Dict[str, Any]:
+        """Compile a dictionary of observation files to copy
+
+        This method uses the OBS_LIST configuration variable to generate a dictionary
+        from a list of YAML files that specify what observation bias correction files
+        are to be copied to the run directory from the observation input directory
+
+        Parameters
+        ----------
+
+        Returns
+        ----------
+        bias_dict: Dict
+            a dictionary containing the list of observation bias files to copy for FileHandler
+        """
+        logger.debug(f"OBS_LIST: {self.task_config['OBS_LIST']}")
+        obs_list_config = parse_j2yaml(self.task_config["OBS_LIST"], self.task_config)
+        logger.debug(f"obs_list_config: {obs_list_config}")
+        # get observers from master dictionary
+        observers = obs_list_config['observers']
+        copylist = []
+        for ob in observers:
+            if 'obs bias' in ob.keys():
+                obfile = ob['obs bias']['input file']
+                obdir = os.path.dirname(obfile)
+                basename = os.path.basename(obfile)
+                prefix = '.'.join(basename.split('.')[:-2])
+                for file in ['satbias.nc4', 'satbias_cov.nc4', 'tlapse.txt']:
+                    bfile = f"{prefix}.{file}"
+                    copylist.append([os.path.join(self.task_config.comin_ges_atm, bfile), os.path.join(obdir, bfile)])
+
+        bias_dict = {
+            'mkdir': [os.path.join(self.runtime_config.DATA, 'bc')],
+            'copy': copylist
+        }
+        return bias_dict
 
     @logit(logger)
     def add_fv3_increments(self, inc_file_tmpl: str, bkg_file_tmpl: str, incvars: List) -> None:
@@ -68,16 +113,16 @@ class Analysis(Task):
         Parameters
         ----------
         inc_file_tmpl : str
-           template of the FV3 increment file of the form: 'filetype.{tileX}.nc'
+           template of the FV3 increment file of the form: 'filetype.tile{tilenum}.nc'
         bkg_file_tmpl : str
-           template of the FV3 background file of the form: 'filetype.{tileX}.nc'
+           template of the FV3 background file of the form: 'filetype.tile{tilenum}.nc'
         incvars : List
            List of increment variables to add to the background
         """
 
-        for tt in range(1, self.config.ntiles + 1):
-            inc_path = inc_file_tmpl.replace('tileX', f'tile{tt}')
-            bkg_path = bkg_file_tmpl.replace('tileX', f'tile{tt}')
+        for itile in range(1, self.config.ntiles + 1):
+            inc_path = inc_file_tmpl.format(tilenum=itile)
+            bkg_path = bkg_file_tmpl.format(tilenum=itile)
             with Dataset(inc_path, mode='r') as incfile, Dataset(bkg_path, mode='a') as rstfile:
                 for vname in incvars:
                     increment = incfile.variables[vname][:]
