@@ -3,6 +3,7 @@ import os
 import copy
 from collections import namedtuple
 from collections.abc import Sequence
+from typing import Union, List
 
 # Template imported with permission from jcsda/solo
 
@@ -162,6 +163,37 @@ class Template:
             excluded = set()
         build(dictionary, var)
         return var
+
+
+def generate_com(template: Union[List, str], **kwargs) -> Union[List, str]:
+    """
+    Description:
+    ------------
+    Generates a list of strings or a string from a template. The template can be a string or a list of strings.
+    The template can contain variables in the form ${variable_name} or $variable_name. The variables are
+    substituted from kwargs. If the variable is not found in kwargs, it is left unchanged.
+    If the template is a list, the output is a list of strings, otherwise it is a string.
+
+    Parameters:
+    -----------
+    template: Union[List, str]
+        The template to be substituted.
+    kwargs: dict
+        The dictionary of variables to substitute.
+
+    Returns:
+    --------
+    Union[List, str]
+        The substituted template.
+    """
+
+    if isinstance(template, list):
+        out = []
+        for tt in template:
+            out.append(Template.substitute_structure(tt, TemplateConstants.DOLLAR_CURLY_BRACE, kwargs.get))
+    else:
+        out = Template.substitute_structure(template, TemplateConstants.DOLLAR_CURLY_BRACE, kwargs.get)
+    return out
 
 
 # These used to be in basic.py, and have been copied here till they are needed elsewhere.

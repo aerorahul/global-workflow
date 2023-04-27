@@ -91,6 +91,22 @@ class GFS(UFS):
         is_warm_start: bool
             Returns True if this is a warm start, False otherwise
         """
+        com_atm_rst_prev = self._config.COM_ATMOS_RESTART_PREV
+        com_atm_input = self._config.COM_ATMOS_INPUT
+
+        atm_warm_start_file = os.path.join(com_atm_rst_prev, 'coupler.res')
+        atm_cold_start_file = os.path.join(com_atm_input, 'gfs_ctrl.nc')
+
+        if os.path.exists(atm_warm_start_file):  # This is a warm start
+            logger.info(f"Found {atm_warm_start_file}, this is a warm start")
+            return True
+        elif os.path.exists(atm_cold_start_file):
+            logger.info(f"Found {atm_cold_start_file}, this is a cold start")
+            return False
+        else:
+            raise FileNotFoundError("Unable to determine if this is an atmos. warm start or cold start!")
+
+
         # TODO: This method will be replaced with a data driven decision after the COM reorg PR goes in
         return False
 

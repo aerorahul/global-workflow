@@ -32,6 +32,9 @@ class GFSForecast(Task):
 
         super().__init__(config, *args, **kwargs)
 
+        com_atmos_restart_prev = config.get('COM_ATMOS_RESTART_PREV')
+        localconf = AttrDict()
+
         self.task_config = AttrDict(**self.config, **self.runtime_config)
 
         # Create and initialize the GFS variant of the UFS

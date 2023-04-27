@@ -205,3 +205,24 @@ class UFS:
         # Initialize the Python dictionary with the default
         # `model_configure` attribute values.
         cfg = self.mdl_config_defs()
+
+    @logit(logger)
+    def fv3_ics(self) -> List[str]:
+        """
+        Description
+        -----------
+        """
+        cold_ics = ['gfs_ctrl.nc'] + \
+                   [f'gfs_data.tile{nn}.nc' for nn in range(1, self.ufs_model.ntiles+1)] + \
+                   [f'sfc_data.tile{nn}.nc' for nn in range(
+                       1, self.ufs_model.ntiles+1)]
+
+        warm_ics = ['coupler.res', 'fv_core.res.nc']
+        ftypes = ['fv_core.res', 'fv_srf_wnd.res',
+                  'fv_tracer.res', 'phy_data', 'sfc_data', 'ca_data']
+        warm_ics += [
+            f'{ftype}.tile{nn}.nc' for ftype in ftypes for nn in range(1, self.ufs_model.ntiles+1)]
+
+        ics = warm_ics if self.warm_start else cold_ics
+
+        return ics
