@@ -1,0 +1,12 @@
+# Installation requirements
+numpy>=1.21.6
+PyYAML>=6.0
+Jinja2>=3.0.0
+f90nml>=1.4.3
+
+# Test requirements
+pytest>=6.2.5
+pycodestyle>=2.8.0
+
+# Optional requirements
+pylint>=2.11.1
