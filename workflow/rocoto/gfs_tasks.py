@@ -337,26 +337,16 @@ class GFSTasks(Tasks):
         dependencies = rocoto.create_dependency(dep=deps)
 
         resources = self.get_resource('preplandobs')
-        task = create_wf_task('preplandobs', resources, cdump=self.cdump, envar=self.envars, dependency=dependencies,
-                              cycledef=f'{self.cdump}_land_prep')
+        task = create_wf_task('preplandobs', resources, cdump=self.cdump, envar=self.envars, dependency=dependencies)
 
         return task
 
     def landanl(self):
 
         deps = []
-        dep_dict = {'type': 'task', 'name': f'{self.cdump}prep'}
-        deps.append(rocoto.add_dependency(dep_dict))
-
-        # Either gdaspreplandobs (runs in 18z cycle) or not 18z cycle
-        sub_deps = []
         dep_dict = {'type': 'task', 'name': f'{self.cdump}preplandobs'}
-        sub_deps.append(rocoto.add_dependency(dep_dict))
-        dep_dict = {'type': 'strneq', 'left': '@H', 'right': 18}
-        sub_deps.append(rocoto.add_dependency(dep_dict))
-        deps.append(rocoto.create_dependency(dep_condition='xor', dep=sub_deps))
-
-        dependencies = rocoto.create_dependency(dep_condition='and', dep=deps)
+        deps.append(rocoto.add_dependency(dep_dict))
+        dependencies = rocoto.create_dependency(dep=deps)
 
         resources = self.get_resource('landanl')
         task = create_wf_task('landanl', resources, cdump=self.cdump, envar=self.envars, dependency=dependencies)
@@ -890,9 +880,11 @@ class GFSTasks(Tasks):
         dependencies = rocoto.create_dependency(dep_condition='and', dep=deps)
 
         metpenvars = self.envars.copy()
-        metpenvar_dict = {'SDATE_GFS': self._base.get('SDATE_GFS'),
-                          # TODO - in Forecast-only, this is `SDATE` on the RHS
-                          'METPCASE': '#metpcase#'}
+        if self.app_config.mode in ['cycled']:
+            metpenvar_dict = {'SDATE_GFS': self._base.get('SDATE_GFS').strftime("%Y%m%d%H")}
+        elif self.app_config.mode in ['forecast-only']:
+            metpenvar_dict = {'SDATE_GFS': self._base.get('SDATE').strftime("%Y%m%d%H")}
+        metpenvar_dict['METPCASE'] = '#metpcase#'
         for key, value in metpenvar_dict.items():
             metpenvars.append(rocoto.create_envar(name=key, value=str(value)))
 
