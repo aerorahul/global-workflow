@@ -5,7 +5,7 @@
 # Check for minimim cmake requirement
 cmake_minimum_required( VERSION 3.20 FATAL_ERROR )
 
-project(global_workflow VERSION 1.0.0 LANGUAGES C CXX Fortran )
+project(global_workflow VERSION 1.0.0)
 
 include(GNUInstallDirs)
 enable_testing()
@@ -20,8 +20,8 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "^(Debug|Release|RelWithDebInfo|MinSizeRel)$")
                                                "MinSizeRel" "RelWithDebInfo")
 endif()
 
-set( BUILD_GFS_UTILS ON CACHE BOOL "Build GFS-utils" )
-
-option(BUILD_GFS_UTILS "Build GFS utilitiles" ON)
+option(BUILD_GFS_UTILS "Build GFS utilities" ON)
+option(BUILD_UFS_UTILS "Build UFS utilities" OFF)  # TODO: Await PR in ufs-utils
+option(BUILD_GSI_MONITOR "Build GSI monitoring utilities" ON)
 
 add_subdirectory(sorc)
