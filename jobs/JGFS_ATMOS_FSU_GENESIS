@@ -3,8 +3,6 @@
 source "${HOMEgfs}/ush/preamble.sh"
 source "${HOMEgfs}/ush/jjob_header.sh" -e "vrfy" -c "base vrfy"
 
-export RUN_ENVIR=${RUN_ENVIR:-"nco"}
-
 export COMPONENT="atmos"
 
 
@@ -16,10 +14,8 @@ export CDUMP=${CDUMP:-${RUN:-"gfs"}}
 
 
 ####################################
-# SENDCOM  - Copy Files From TMPDIR to $COMOUT
 # SENDDBN  - Issue DBNet Client Calls
 ####################################
-export SENDCOM=YES
 export SENDDBN=${SENDDBN:-NO}
 export SENDECF=${SENDECF:-NO}
 

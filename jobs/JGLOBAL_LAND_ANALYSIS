@@ -8,7 +8,7 @@ source "${HOMEgfs}/ush/jjob_header.sh" -e "landanl" -c "base landanl"
 ##############################################
 # Ignore possible spelling error (nothing is misspelled)
 # shellcheck disable=SC2153
-GDATE=$(date +%Y%m%d%H -d "${PDY} ${cyc} - ${assim_freq} hours")
+GDATE=$(date --utc +%Y%m%d%H -d "${PDY} ${cyc} - ${assim_freq} hours")
 gPDY=${GDATE:0:8}
 gcyc=${GDATE:8:2}
 GDUMP="gdas"
@@ -17,12 +17,12 @@ GDUMP="gdas"
 # Begin JOB SPECIFIC work
 ##############################################
 # Generate COM variables from templates
-YMD=${PDY} HH=${cyc} generate_com -rx COM_OBS COM_LAND_ANALYSIS
+YMD=${PDY} HH=${cyc} generate_com -rx COM_OBS COM_LAND_ANALYSIS COM_CONF
 
 RUN=${GDUMP} YMD=${gPDY} HH=${gcyc} generate_com -rx \
     COM_ATMOS_RESTART_PREV:COM_ATMOS_RESTART_TMPL
 
-mkdir -m 775 -p "${COM_LAND_ANALYSIS}"
+mkdir -m 775 -p "${COM_LAND_ANALYSIS}" "${COM_CONF}"
 
 ###############################################################
 # Run relevant script

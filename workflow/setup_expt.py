@@ -71,7 +71,15 @@ def fill_COMROT_cycled(host, inputs):
     rdatestr = datetime_to_YMDH(inputs.idate - to_timedelta('T06H'))
     idatestr = datetime_to_YMDH(inputs.idate)
 
-    if os.path.isdir(os.path.join(inputs.icsdir, f'{inputs.cdump}.{rdatestr[:8]}', rdatestr[8:], 'model_data', 'atmos')):
+    # Test if we are using the new COM structure or the old flat one for ICs
+    if inputs.start in ['warm']:
+        pathstr = os.path.join(inputs.icsdir, f'{inputs.cdump}.{rdatestr[:8]}',
+                               rdatestr[8:], 'model_data', 'atmos')
+    else:
+        pathstr = os.path.join(inputs.icsdir, f'{inputs.cdump}.{idatestr[:8]}',
+                               idatestr[8:], 'model_data', 'atmos')
+
+    if os.path.isdir(pathstr):
         flat_structure = False
     else:
         flat_structure = True
@@ -224,7 +232,15 @@ def fill_COMROT_forecasts(host, inputs):
     """
     Implementation of 'fill_COMROT' for forecast-only mode
     """
-    print('forecast-only mode treats ICs differently and cannot be staged here')
+    if inputs.system in ['gfs']:
+        print('forecast-only mode treats ICs differently and cannot be staged here')
+    elif inputs.system in ['gefs']:  # Temporarily copy ICs from icsdir into COM for      testing
+        print('temporary hack to stage gefs ICs for testing')
+        comrot = os.path.join(inputs.comrot, inputs.pslot)
+        idatestr = datetime_to_YMDH(inputs.idate)
+        current_cycle_dir = f"gefs.{idatestr[:8]}"
+        cmd = f"cp -as {inputs.icsdir}/{current_cycle_dir} {comrot}/{current_cycle_dir}"
+        os.system(cmd)
     return
 
 
@@ -327,10 +343,6 @@ def edit_baseconfig(host, inputs, yaml_dict):
         }
         tmpl_dict = dict(tmpl_dict, **extend_dict)
 
-    # All apps and modes now use the same physics and CCPP suite by default
-    extend_dict = {"@CCPP_SUITE@": "FV3_GFS_v17_p8", "@IMP_PHYSICS@": 8}
-    tmpl_dict = dict(tmpl_dict, **extend_dict)
-
     try:
         tmpl_dict = dict(tmpl_dict, **get_template_dict(yaml_dict['base']))
     except KeyError:
@@ -379,6 +391,65 @@ def input_args(*argv):
     Method to collect user arguments for `setup_expt.py`
     """
 
+    ufs_apps = ['ATM', 'ATMA', 'ATMW', 'S2S', 'S2SA', 'S2SW']
+
+    def _common_args(parser):
+        parser.add_argument('--pslot', help='parallel experiment name',
+                            type=str, required=False, default='test')
+        parser.add_argument('--resdet', help='resolution of the deterministic model forecast',
+                            type=int, required=False, default=384)
+        parser.add_argument('--comrot', help='full path to COMROT',
+                            type=str, required=False, default=os.getenv('HOME'))
+        parser.add_argument('--expdir', help='full path to EXPDIR',
+                            type=str, required=False, default=os.getenv('HOME'))
+        parser.add_argument('--idate', help='starting date of experiment, initial conditions must exist!',
+                            required=True, type=lambda dd: to_datetime(dd))
+        parser.add_argument('--edate', help='end date experiment', required=True, type=lambda dd: to_datetime(dd))
+        return parser
+
+    def _gfs_args(parser):
+        parser.add_argument('--start', help='restart mode: warm or cold', type=str,
+                            choices=['warm', 'cold'], required=False, default='cold')
+        parser.add_argument('--cdump', help='CDUMP to start the experiment',
+                            type=str, required=False, default='gdas')
+        # --configdir is hidden from help
+        parser.add_argument('--configdir', help=SUPPRESS, type=str, required=False, default=os.path.join(_top, 'parm/config/gfs'))
+        parser.add_argument('--yaml', help='Defaults to substitute from', type=str,
+                            required=False, default=os.path.join(_top, 'parm/config/gfs/yaml/defaults.yaml'))
+        return parser
+
+    def _gfs_cycled_args(parser):
+        parser.add_argument('--icsdir', help='full path to initial condition directory', type=str, required=False, default=None)
+        parser.add_argument('--app', help='UFS application', type=str,
+                            choices=ufs_apps, required=False, default='ATM')
+        parser.add_argument('--gfs_cyc', help='cycles to run forecast', type=int,
+                            choices=[0, 1, 2, 4], default=1, required=False)
+        return parser
+
+    def _gfs_or_gefs_ensemble_args(parser):
+        parser.add_argument('--resens', help='resolution of the ensemble model forecast',
+                            type=int, required=False, default=192)
+        parser.add_argument('--nens', help='number of ensemble members',
+                            type=int, required=False, default=20)
+        return parser
+
+    def _gfs_or_gefs_forecast_args(parser):
+        parser.add_argument('--app', help='UFS application', type=str,
+                            choices=ufs_apps + ['S2SWA'], required=False, default='ATM')
+        parser.add_argument('--gfs_cyc', help='Number of forecasts per day', type=int,
+                            choices=[1, 2, 4], default=1, required=False)
+        return parser
+
+    def _gefs_args(parser):
+        parser.add_argument('--start', help=SUPPRESS, type=str, required=False, default='cold')
+        parser.add_argument('--configdir', help=SUPPRESS, type=str, required=False,
+                            default=os.path.join(_top, 'parm/config/gefs'))
+        parser.add_argument('--yaml', help='Defaults to substitute from', type=str, required=False,
+                            default=os.path.join(_top, 'parm/config/gefs/yaml/defaults.yaml'))
+        parser.add_argument('--icsdir', help='full path to initial condition directory [temporary hack in place for testing]',
+                            type=str, required=False, default=None)
+        return parser
+
     description = """
         Setup files and directories to start a GFS parallel.\n
         Create EXPDIR, copy config files.\n
@@ -393,70 +464,38 @@ def input_args(*argv):
     gfs = sysparser.add_parser('gfs', help='arguments for GFS')
     gefs = sysparser.add_parser('gefs', help='arguments for GEFS')
 
-    modeparser = gfs.add_subparsers(dest='mode')
-    cycled = modeparser.add_parser('cycled', help='arguments for cycled mode')
-    forecasts = modeparser.add_parser('forecast-only', help='arguments for forecast-only mode')
+    gfsmodeparser = gfs.add_subparsers(dest='mode')
+    gfscycled = gfsmodeparser.add_parser('cycled', help='arguments for cycled mode')
+    gfsforecasts = gfsmodeparser.add_parser('forecast-only', help='arguments for forecast-only mode')
+
+    gefsmodeparser = gefs.add_subparsers(dest='mode')
+    gefsforecasts = gefsmodeparser.add_parser('forecast-only', help='arguments for forecast-only mode')
 
     # Common arguments across all modes
-    for subp in [cycled, forecasts, gefs]:
-        subp.add_argument('--pslot', help='parallel experiment name',
-                          type=str, required=False, default='test')
-        subp.add_argument('--resdet', help='resolution of the deterministic model forecast',
-                          type=int, required=False, default=384)
-        subp.add_argument('--comrot', help='full path to COMROT',
-                          type=str, required=False, default=os.getenv('HOME'))
-        subp.add_argument('--expdir', help='full path to EXPDIR',
-                          type=str, required=False, default=os.getenv('HOME'))
-        subp.add_argument('--idate', help='starting date of experiment, initial conditions must exist!',
-                          required=True, type=lambda dd: to_datetime(dd))
-        subp.add_argument('--edate', help='end date experiment', required=True, type=lambda dd: to_datetime(dd))
-
-    ufs_apps = ['ATM', 'ATMA', 'ATMW', 'S2S', 'S2SA', 'S2SW']
+    for subp in [gfscycled, gfsforecasts, gefsforecasts]:
+        subp = _common_args(subp)
 
     # GFS-only arguments
-    for subp in [cycled, forecasts]:
-        subp.add_argument('--start', help='restart mode: warm or cold', type=str,
-                          choices=['warm', 'cold'], required=False, default='cold')
-        subp.add_argument('--cdump', help='CDUMP to start the experiment',
-                          type=str, required=False, default='gdas')
-        # --configdir is hidden from help
-        subp.add_argument('--configdir', help=SUPPRESS, type=str, required=False, default=os.path.join(_top, 'parm/config/gfs'))
-        subp.add_argument('--yaml', help='Defaults to substitute from', type=str,
-                          required=False, default=os.path.join(_top, 'parm/config/gfs/yaml/defaults.yaml'))
+    for subp in [gfscycled, gfsforecasts]:
+        subp = _gfs_args(subp)
 
     # ensemble-only arguments
-    for subp in [cycled, gefs]:
-        subp.add_argument('--resens', help='resolution of the ensemble model forecast',
-                          type=int, required=False, default=192)
-        subp.add_argument('--nens', help='number of ensemble members',
-                          type=int, required=False, default=20)
+    for subp in [gfscycled, gefsforecasts]:
+        subp = _gfs_or_gefs_ensemble_args(subp)
 
     # GFS/GEFS forecast-only additional arguments
-    for subp in [forecasts, gefs]:
-        subp.add_argument('--app', help='UFS application', type=str,
-                          choices=ufs_apps + ['S2SWA'], required=False, default='ATM')
-        subp.add_argument('--gfs_cyc', help='Number of forecasts per day', type=int,
-                          choices=[1, 2, 4], default=1, required=False)
+    for subp in [gfsforecasts, gefsforecasts]:
+        subp = _gfs_or_gefs_forecast_args(subp)
 
     # cycled mode additional arguments
-    cycled.add_argument('--icsdir', help='full path to initial condition directory', type=str, required=False, default=None)
-    cycled.add_argument('--app', help='UFS application', type=str,
-                        choices=ufs_apps, required=False, default='ATM')
-    cycled.add_argument('--gfs_cyc', help='cycles to run forecast', type=int,
-                        choices=[0, 1, 2, 4], default=1, required=False)
+    for subp in [gfscycled]:
+        subp = _gfs_cycled_args(subp)
 
-    # GEFS-only arguments
-    # Create hidden mode argument since there is real option for GEFS
-    gefs.add_argument('--mode', help=SUPPRESS, type=str, required=False, default='forecast-only')
-    # Create hidden start argument since GEFS is always cold start
-    gefs.add_argument('--start', help=SUPPRESS, type=str, required=False, default='cold')
-    # Create hidden arguments for configdir and yaml
-    gefs.add_argument('--configdir', help=SUPPRESS, type=str, required=False,
-                      default=os.path.join(_top, 'parm/config/gefs'))
-    gefs.add_argument('--yaml', help='Defaults to substitute from', type=str, required=False,
-                      default=os.path.join(_top, 'parm/config/gefs/yaml/defaults.yaml'))
+    # GEFS forecast-only arguments
+    for subp in [gefsforecasts]:
+        subp = _gefs_args(subp)
 
-    return parser.parse_args(argv[0][0] if len(argv[0]) else None)
+    return parser.parse_args(list(*argv) if len(argv) else None)
 
 
 def query_and_clean(dirname):
@@ -492,7 +531,7 @@ def validate_user_request(host, inputs):
 
 def main(*argv):
 
-    user_inputs = input_args(argv)
+    user_inputs = input_args(*argv)
     host = Host()
 
     validate_user_request(host, user_inputs)

@@ -131,6 +131,10 @@ fi
 #---------------------------------------
 #--add files from external repositories
 #---------------------------------------
+#--copy/link NoahMp table form ccpp-physics repository
+cd "${HOMEgfs}/parm/ufs" || exit 1
+${LINK_OR_COPY} "${HOMEgfs}/sorc/ufs_model.fd/FV3/ccpp/physics/physics/noahmptable.tbl" .
+
 cd "${HOMEgfs}/parm/post" || exit 1
 for file in postxconfig-NT-GEFS-ANL.txt postxconfig-NT-GEFS-F00.txt postxconfig-NT-GEFS.txt postxconfig-NT-GFS-ANL.txt \
     postxconfig-NT-GFS-F00-TWO.txt postxconfig-NT-GFS-F00.txt postxconfig-NT-GFS-FLUX-F00.txt postxconfig-NT-GFS-FLUX.txt \
@@ -183,7 +187,7 @@ if [[ -d "${HOMEgfs}/sorc/gdas.cd" ]]; then
   cd "${HOMEgfs}/fix" || exit 1
   [[ ! -d gdas ]] && mkdir -p gdas
   cd gdas || exit 1
-  for gdas_sub in crtm fv3jedi gsibec; do
+  for gdas_sub in fv3jedi gsibec; do
     if [[ -d "${gdas_sub}" ]]; then
        rm -rf "${gdas_sub}"
     fi
@@ -199,6 +203,7 @@ if [[ -d "${HOMEgfs}/sorc/gdas.cd" ]]; then
   cd "${HOMEgfs}/ush" || exit 1
   ${LINK_OR_COPY} "${HOMEgfs}/sorc/gdas.cd/ush/ufsda"                              .
   ${LINK_OR_COPY} "${HOMEgfs}/sorc/gdas.cd/ush/jediinc2fv3.py"                     .
+  ${LINK_OR_COPY} "${HOMEgfs}/sorc/gdas.cd/ush/ioda/bufr2ioda/run_bufr2ioda.py"    .
   ${LINK_OR_COPY} "${HOMEgfs}/sorc/gdas.cd/build/bin/imsfv3_scf2ioda.py"           .
 fi
 

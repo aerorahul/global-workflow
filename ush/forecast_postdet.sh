@@ -140,7 +140,7 @@ EOF
   fi
 
   OROFIX=${OROFIX:-"${FIX_DIR}/orog/${CASE}.mx${OCNRES}_frac"}
-  FIX_SFC=${FIX_SFC:-"${OROFIX}/fix_sfc"}
+  FIX_SFC=${FIX_SFC:-"${OROFIX}/sfc"}
   for n in $(seq 1 "${ntiles}"); do
     ${NLN} "${OROFIX}/oro_${CASE}.mx${OCNRES}.tile${n}.nc" "${DATA}/INPUT/oro_data.tile${n}.nc"
     ${NLN} "${OROFIX}/${CASE}_grid.tile${n}.nc"     "${DATA}/INPUT/${CASE}_grid.tile${n}.nc"
@@ -189,6 +189,15 @@ EOF
     iopt_stc=${iopt_stc:-"1"}
     IALB=${IALB:-1}
     IEMS=${IEMS:-1}
+  fi
+
+  # NoahMP table
+  local noahmptablefile="${HOMEgfs}/parm/ufs/noahmptable.tbl"
+  if [[ ! -f ${noahmptablefile} ]]; then
+    echo "FATAL ERROR: missing noahmp table file ${noahmptablefile}"
+    exit 1
+  else
+    ${NLN} "${noahmptablefile}" "${DATA}/noahmptable.tbl"
   fi
 
   # Files for GWD
@@ -294,17 +303,18 @@ EOF
   FNSNOC=${FNSNOC:-"${FIX_DIR}/am/global_snoclim.1.875.grb"}
   FNZORC=${FNZORC:-"igbp"}
   FNAISC=${FNAISC:-"${FIX_DIR}/am/IMS-NIC.blended.ice.monthly.clim.grb"}
-  FNALBC2=${FNALBC2:-"${FIX_SFC}/${CASE}.facsf.tileX.nc"}
-  FNTG3C=${FNTG3C:-"${FIX_SFC}/${CASE}.substrate_temperature.tileX.nc"}
-  FNVEGC=${FNVEGC:-"${FIX_SFC}/${CASE}.vegetation_greenness.tileX.nc"}
+  FNALBC2=${FNALBC2:-"${FIX_SFC}/${CASE}.mx${OCNRES}.facsf.tileX.nc"}
+  FNTG3C=${FNTG3C:-"${FIX_SFC}/${CASE}.mx${OCNRES}.substrate_temperature.tileX.nc"}
+  FNVEGC=${FNVEGC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
   FNMSKH=${FNMSKH:-"${FIX_DIR}/am/global_slmask.t1534.3072.1536.grb"}
-  FNVMNC=${FNVMNC:-"${FIX_SFC}/${CASE}.vegetation_greenness.tileX.nc"}
-  FNVMXC=${FNVMXC:-"${FIX_SFC}/${CASE}.vegetation_greenness.tileX.nc"}
-  FNSLPC=${FNSLPC:-"${FIX_SFC}/${CASE}.slope_type.tileX.nc"}
-  FNALBC=${FNALBC:-"${FIX_SFC}/${CASE}.snowfree_albedo.tileX.nc"}
-  FNVETC=${FNVETC:-"${FIX_SFC}/${CASE}.vegetation_type.tileX.nc"}
-  FNSOTC=${FNSOTC:-"${FIX_SFC}/${CASE}.soil_type.tileX.nc"}
-  FNABSC=${FNABSC:-"${FIX_SFC}/${CASE}.maximum_snow_albedo.tileX.nc"}
+  FNVMNC=${FNVMNC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
+  FNVMXC=${FNVMXC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
+  FNSLPC=${FNSLPC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.slope_type.tileX.nc"}
+  FNALBC=${FNALBC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.snowfree_albedo.tileX.nc"}
+  FNVETC=${FNVETC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.vegetation_type.tileX.nc"}
+  FNSOTC=${FNSOTC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.soil_type.tileX.nc"}
+  FNSOCC=${FNSOCC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.soil_color.tileX.nc"}
+  FNABSC=${FNABSC:-"${FIX_SFC}/${CASE}.mx${OCNRES}.maximum_snow_albedo.tileX.nc"}
   FNSMCC=${FNSMCC:-"${FIX_DIR}/am/global_soilmgldas.statsgo.t${JCAP}.${LONB}.${LATB}.grb"}
 
   # If the appropriate resolution fix file is not present, use the highest resolution available (T1534)
@@ -495,12 +505,12 @@ FV3_out() {
   if [[ ${RUN} =~ "gdas" ]]; then
     cd "${DATA}/RESTART"
     mkdir -p "${COM_ATMOS_RESTART}"
-    local idate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+    local idate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
     while [[ ${idate} -le ${forecast_end_cycle} ]]; do
       for file in "${idate:0:8}.${idate:8:2}0000."*; do
         ${NCP} "${file}" "${COM_ATMOS_RESTART}/${file}"
       done
-      local idate=$(date -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+      local idate=$(date --utc -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
     done
   else
     # No need to copy FV3 restart files when RUN=gfs or gefs
@@ -605,7 +615,7 @@ WW3_postdet() {
   local fhr vdate FHINC wavGRD
   fhr=${FHMIN_WAV}
   while [[ ${fhr} -le ${FHMAX_WAV} ]]; do
-    vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
     if [[ ${waveMULTIGRID} = ".true." ]]; then
       for wavGRD in ${waveGRD} ; do
         ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${wavGRD}.${vdate:0:8}.${vdate:8:2}0000" "${DATA}/${vdate:0:8}.${vdate:8:2}0000.out_grd.${wavGRD}"
@@ -623,7 +633,7 @@ WW3_postdet() {
   # Loop for point output (uses DTPNT)
   fhr=${FHMIN_WAV}
   while [[ ${fhr} -le ${FHMAX_WAV} ]]; do
-    vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
     if [[ ${waveMULTIGRID} = ".true." ]]; then
       ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate:0:8}.${vdate:8:2}0000" "${DATA}/${vdate:0:8}.${vdate:8:2}0000.out_pnt.${waveuoutpGRD}"
     else
@@ -753,8 +763,8 @@ MOM6_postdet() {
       (( interval = fhr - last_fhr ))
       (( midpoint = last_fhr + interval/2 ))
 
-      local vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
-      local vdate_mid=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${midpoint} hours" +%Y%m%d%H)
+      local vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+      local vdate_mid=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${midpoint} hours" +%Y%m%d%H)
 
 
       # Native model output uses window midpoint in the filename, but we are mapping that to the end of the period for COM
@@ -776,7 +786,7 @@ MOM6_postdet() {
 
     # Save MOM6 backgrounds
     for fhr in ${FV3_OUTPUT_FH}; do
-      local idatestr=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y_%m_%d_%H)
+      local idatestr=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y_%m_%d_%H)
       local fhr3=$(printf %03i "${fhr}")
       ${NLN} "${COM_OCEAN_HISTORY}/${RUN}.t${cyc}z.ocnf${fhr3}.nc" "${DATA}/ocn_da_${idatestr}.nc"
     done
@@ -799,7 +809,7 @@ MOM6_postdet() {
   esac
 
   # Loop over restart_interval frequency and link restarts from DATA to COM
-  local idate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+  local idate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   while [[ ${idate} -lt ${forecast_end_cycle} ]]; do
     local idatestr=$(date +%Y-%m-%d-%H -d "${idate:0:8} ${idate:8:2}")
     ${NLN} "${COM_OCEAN_RESTART}/${idate:0:8}.${idate:8:2}0000.MOM.res.nc" "${DATA}/MOM6_RESTART/"
@@ -810,7 +820,7 @@ MOM6_postdet() {
         done
         ;;
     esac
-    local idate=$(date -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+    local idate=$(date --utc -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   done
 
   # TODO: mediator should have its own CMEPS_postdet() function
@@ -820,12 +830,12 @@ MOM6_postdet() {
   # Instead of linking, copy the mediator files after the model finishes
   #local COMOUTmed="${ROTDIR}/${RUN}.${PDY}/${cyc}/med"
   #mkdir -p "${COMOUTmed}/RESTART"
-  #local idate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+  #local idate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   #while [[ ${idate} -le ${forecast_end_cycle} ]]; do
   #  local seconds=$(to_seconds ${idate:8:2}0000)  # use function to_seconds from forecast_predet.sh to convert HHMMSS to seconds
   #  local idatestr="${idate:0:4}-${idate:4:2}-${idate:6:2}-${seconds}"
   #  ${NLN} "${COMOUTmed}/RESTART/${idate:0:8}.${idate:8:2}0000.ufs.cpld.cpl.r.nc" "${DATA}/RESTART/ufs.cpld.cpl.r.${idatestr}.nc"
-  #  local idate=$(date -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+  #  local idate=$(date --utc -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   #done
 
   echo "SUB ${FUNCNAME[0]}: MOM6 input data linked/copied"
@@ -850,7 +860,7 @@ MOM6_out() {
   # Linking mediator restarts to COM causes the model to fail with a message.
   # See MOM6_postdet() function for error message
   mkdir -p "${COM_MED_RESTART}"
-  local idate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+  local idate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   while [[ ${idate} -le ${forecast_end_cycle} ]]; do
     local seconds=$(to_seconds "${idate:8:2}"0000)  # use function to_seconds from forecast_predet.sh to convert HHMMSS to seconds
     local idatestr="${idate:0:4}-${idate:4:2}-${idate:6:2}-${seconds}"
@@ -860,7 +870,7 @@ MOM6_out() {
     else
       echo "Mediator restart ${mediator_file} not found."
     fi
-    local idate=$(date -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+    local idate=$(date --utc -d "${idate:0:8} ${idate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   done
 }
 
@@ -922,7 +932,7 @@ CICE_postdet() {
     # TODO: consult w/ NB on how to improve on this.  Gather requirements and more information on what these files are and how they are used to properly catalog them
     local vdate seconds vdatestr fhr last_fhr
     for fhr in ${FV3_OUTPUT_FH}; do
-      vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+      vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
       seconds=$(to_seconds "${vdate:8:2}0000")  # convert HHMMSS to seconds
       vdatestr="${vdate:0:4}-${vdate:4:2}-${vdate:6:2}-${seconds}"
 
@@ -948,11 +958,11 @@ CICE_postdet() {
     local vdate vdatestr seconds fhr fhr3
     fhr="${FHOUT}"
     while [[ "${fhr}" -le "${FHMAX}" ]]; do
-      vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+      vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
       seconds=$(to_seconds "${vdate:8:2}0000")  # convert HHMMSS to seconds
       vdatestr="${vdate:0:4}-${vdate:4:2}-${vdate:6:2}-${seconds}"
       fhr3=$(printf %03i "${fhr}")
-      ${NLN} "${COM_ICE_HISTORY}/${RUN}.t${cyc}z.icef${fhr3}.nc" "${DATA}/CICE_OUTPUT/iceh_inst.-${vdatestr}.nc"
+      ${NLN} "${COM_ICE_HISTORY}/${RUN}.t${cyc}z.icef${fhr3}.nc" "${DATA}/CICE_OUTPUT/iceh_inst.${vdatestr}.nc"
       fhr=$((fhr + FHOUT))
     done
 
@@ -961,12 +971,12 @@ CICE_postdet() {
   # Link CICE restarts from CICE_RESTART to COMOUTice/RESTART
   # Loop over restart_interval and link restarts from DATA to COM
   local vdate vdatestr seconds
-  vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+  vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   while [[ ${vdate} -le ${forecast_end_cycle} ]]; do
     seconds=$(to_seconds "${vdate:8:2}0000")  # convert HHMMSS to seconds
     vdatestr="${vdate:0:4}-${vdate:4:2}-${vdate:6:2}-${seconds}"
     ${NLN} "${COM_ICE_RESTART}/${vdate:0:8}.${vdate:8:2}0000.cice_model.res.nc" "${DATA}/CICE_RESTART/cice_model.res.${vdatestr}.nc"
-    vdate=$(date -d "${vdate:0:8} ${vdate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+    vdate=$(date --utc -d "${vdate:0:8} ${vdate:8:2} + ${restart_interval} hours" +%Y%m%d%H)
   done
 }
 
@@ -1021,7 +1031,7 @@ GOCART_postdet() {
   if [[ ! -d "${COM_CHEM_HISTORY}" ]]; then mkdir -p "${COM_CHEM_HISTORY}"; fi
 
   for fhr in ${FV3_OUTPUT_FH}; do
-    local vdate=$(date -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+    local vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
 
     # Temporarily delete existing files due to noclobber in GOCART
     if [[ -e "${COM_CHEM_HISTORY}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" ]]; then

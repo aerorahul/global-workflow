@@ -12,7 +12,7 @@ export CDUMP=${RUN/enkf}
 YMD=${PDY} HH=${cyc} generate_com -rx COM_ATMOS_ANALYSIS COM_ATMOS_BUFR COM_ATMOS_GEMPAK \
   COM_ATMOS_GENESIS COM_ATMOS_HISTORY COM_ATMOS_INPUT COM_ATMOS_MASTER COM_ATMOS_RESTART \
   COM_ATMOS_TRACK COM_ATMOS_WMO \
-  COM_CHEM_HISTORY \
+  COM_CHEM_HISTORY COM_CHEM_ANALYSIS\
   COM_MED_RESTART \
   COM_ICE_HISTORY COM_ICE_INPUT COM_ICE_RESTART \
   COM_OBS COM_TOP \
@@ -20,8 +20,8 @@ YMD=${PDY} HH=${cyc} generate_com -rx COM_ATMOS_ANALYSIS COM_ATMOS_BUFR COM_ATMO
   COM_WAVE_GRID COM_WAVE_HISTORY COM_WAVE_STATION
 
 for grid in "0p25" "0p50" "1p00"; do
-  YMD=${PDY} HH=${cyc} GRID=${grid} generate_com -rx "COM_ATMOS_GRIB_${grid}:COM_ATMOS_GRIB_TMPL"
-  YMD=${PDY} HH=${cyc} GRID=${grid} generate_com -rx "COM_OCEAN_GRIB_${grid}:COM_OCEAN_GRIB_TMPL"
+  YMD=${PDY} HH=${cyc} GRID=${grid} generate_com -rx "COM_ATMOS_GRIB_${grid}:COM_ATMOS_GRIB_GRID_TMPL"
+  YMD=${PDY} HH=${cyc} GRID=${grid} generate_com -rx "COM_OCEAN_GRIB_${grid}:COM_OCEAN_GRIB_GRID_TMPL"
 done
 
 ###############################################################

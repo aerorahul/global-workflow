@@ -4,9 +4,6 @@ source "${HOMEgfs}/ush/preamble.sh"
 source "${HOMEgfs}/ush/jjob_header.sh" -e "vrfy" -c "base vrfy"
 
 
-# TODO (#1220) Determine if this is still needed
-export RUN_ENVIR=${RUN_ENVIR:-"nco"}
-
 export COMPONENT="atmos"
 
 
@@ -18,10 +15,8 @@ export CDUMP=${RUN/enkf}
 
 
 ####################################
-# SENDCOM  - Copy Files From TMPDIR to $COMOUT
 # SENDDBN  - Issue DBNet Client Calls
 ####################################
-export SENDCOM=YES
 export SENDDBN=${SENDDBN:-NO}
 export SENDECF=${SENDECF:-NO}
 
@@ -38,7 +33,7 @@ export USHens_tracker=${USHens_tracker:-${HOMEens_tracker}/ush}
 # Define COM and Data directories
 ##############################################
 YMD=${PDY} HH=${cyc} generate_com -rx COM_ATMOS_TRACK COM_ATMOS_GENESIS
-YMD=${PDY} HH=${cyc} GRID="0p25" generate_com -rx COM_ATMOS_GRIB_0p25:COM_ATMOS_GRIB_TMPL
+YMD=${PDY} HH=${cyc} GRID="0p25" generate_com -rx COM_ATMOS_GRIB_0p25:COM_ATMOS_GRIB_GRID_TMPL
 
 if [[ ! -d "${COM_ATMOS_TRACK}" ]]; then mkdir -p "${COM_ATMOS_TRACK}"; fi
 
@@ -84,7 +79,6 @@ ${USHens_tracker}/extrkr_gfs.sh ${loopnum} ${cmodel} ${CDATE} ${pert} ${DATA}
 export err=$?; err_chk
 
 
-#if [ "$SENDCOM" = 'YES' ]; then
 #  cat ${DATA}/trak.avnx.atcfunix.${PDY}${cyc} | \
 #      sed s:AVNX:GFSO:g \
 #    > ${COMOUT}/gfso.t${cyc}z.cyclone.trackatcfunix
@@ -92,7 +86,6 @@ export err=$?; err_chk
 #  cat ${DATA}/trak.avnx.atcfunix.${PDY}${cyc} | \
 #      sed s:AVNX:AVNO:g \
 #    > ${COMOUT}/avn.t${cyc}z.cyclone.trackatcfunix
-#fi
 
 ##############################################
 # Final processing

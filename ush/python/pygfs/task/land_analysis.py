@@ -73,7 +73,7 @@ class LandAnalysis(Analysis):
 
         # create a temporary dict of all keys needed in this method
         localconf = AttrDict()
-        keys = ['DATA', 'current_cycle', 'COM_OBS', 'COM_ATMOS_RESTART_PREV',
+        keys = ['HOMEgfs', 'DATA', 'current_cycle', 'COM_OBS', 'COM_ATMOS_RESTART_PREV',
                 'OPREFIX', 'CASE', 'ntiles']
         for key in keys:
             localconf[key] = self.task_config[key]
@@ -87,13 +87,6 @@ class LandAnalysis(Analysis):
         logger.info("Copying GTS obs for bufr2ioda.x")
         FileHandler(prep_gts_config.gtsbufr).sync()
 
-        # generate bufr2ioda YAML file
-        bufr2ioda_yaml = os.path.join(self.runtime_config.DATA, "bufr_adpsfc_snow.yaml")
-        logger.info(f"Generate BUFR2IODA YAML file: {bufr2ioda_yaml}")
-        temp_yaml = parse_j2yaml(self.task_config.BUFR2IODAYAML, self.task_config)
-        save_as_yaml(temp_yaml, bufr2ioda_yaml)
-        logger.info(f"Wrote bufr2ioda YAML to: {bufr2ioda_yaml}")
-
         logger.info("Link BUFR2IODAX into DATA/")
         exe_src = self.task_config.BUFR2IODAX
         exe_dest = os.path.join(localconf.DATA, os.path.basename(exe_src))
@@ -101,32 +94,41 @@ class LandAnalysis(Analysis):
             rm_p(exe_dest)
         os.symlink(exe_src, exe_dest)
 
-        output_file = f"{localconf.OPREFIX}adpsfc_snow.nc4"
-        if os.path.isfile(f"{os.path.join(localconf.DATA, output_file)}"):
-            rm_p(output_file)
-
-        # execute BUFR2IODAX to convert GTS bufr data into IODA format
-        yaml_file = f"bufr_adpsfc_snow.yaml"
-        if not os.path.isfile(f"{os.path.join(localconf.DATA, yaml_file)}"):
-            logger.exception(f"{yaml_file} not found")
-            raise FileNotFoundError(f"{os.path.join(localconf.DATA, yaml_file)}")
+        # Create executable instance
         exe = Executable(self.task_config.BUFR2IODAX)
-        exe.add_default_arg(os.path.join(localconf.DATA, f"{yaml_file}"))
 
-        logger.info(f"Executing {exe}")
-        try:
-            exe()
-        except OSError:
-            raise OSError(f"Failed to execute {exe}")
-        except Exception:
-            raise WorkflowException(f"An error occured during execution of {exe}")
+        def _gtsbufr2iodax(exe, yaml_file):
+            if not os.path.isfile(yaml_file):
+                logger.exception(f"{yaml_file} not found")
+                raise FileNotFoundError(yaml_file)
+
+            logger.info(f"Executing {exe}")
+            try:
+                exe(yaml_file)
+            except OSError:
+                raise OSError(f"Failed to execute {exe} {yaml_file}")
+            except Exception:
+                raise WorkflowException(f"An error occured during execution of {exe} {yaml_file}")
+
+        # Loop over entries in prep_gts_config.bufr2ioda keys
+        # 1. generate bufr2ioda YAML files
+        # 2. execute bufr2ioda.x
+        for name in prep_gts_config.bufr2ioda.keys():
+            gts_yaml = os.path.join(self.runtime_config.DATA, f"bufr_{name}_snow.yaml")
+            logger.info(f"Generate BUFR2IODA YAML file: {gts_yaml}")
+            temp_yaml = parse_j2yaml(prep_gts_config.bufr2ioda[name], localconf)
+            save_as_yaml(temp_yaml, gts_yaml)
+            logger.info(f"Wrote bufr2ioda YAML to: {gts_yaml}")
+
+            # execute BUFR2IODAX to convert {name} bufr data into IODA format
+            _gtsbufr2iodax(exe, gts_yaml)
 
         # Ensure the IODA snow depth GTS file is produced by the IODA converter
         # If so, copy to COM_OBS/
         try:
             FileHandler(prep_gts_config.gtsioda).sync()
         except OSError as err:
-            logger.exception(f"{self.task_config.BUFR2IODAX} failed to produce {output_file}")
+            logger.exception(f"{self.task_config.BUFR2IODAX} failed to produce GTS ioda files")
             raise OSError(err)
 
     @logit(logger)
@@ -258,7 +260,7 @@ class LandAnalysis(Analysis):
         FileHandler({'mkdir': dirlist}).sync()
 
         # stage fix files
-        jedi_fix_list_path = os.path.join(self.task_config.HOMEgfs, 'parm', 'parm_gdas', 'land_jedi_fix.yaml')
+        jedi_fix_list_path = os.path.join(self.task_config.HOMEgfs, 'parm', 'gdas', 'land_jedi_fix.yaml')
         logger.info(f"Staging JEDI fix files from {jedi_fix_list_path}")
         jedi_fix_list = parse_yamltmpl(jedi_fix_list_path, self.task_config)
         FileHandler(jedi_fix_list).sync()
@@ -323,8 +325,10 @@ class LandAnalysis(Analysis):
     def finalize(self) -> None:
         """Performs closing actions of the Land analysis task
         This method:
-        - copies analysis back to COM/ from DATA/
-        - tar and gzips the JEDI diagnostic files
+        - tar and gzip the output diag files and place in COM/
+        - copy the generated YAML file from initialize to the COM/
+        - copy the analysis files to the COM/
+        - copy the increment files to the COM/
 
         Parameters
         ----------
@@ -336,6 +340,15 @@ class LandAnalysis(Analysis):
         statfile = os.path.join(self.task_config.COM_LAND_ANALYSIS, f"{self.task_config.APREFIX}landstat.tgz")
         self.tgz_diags(statfile, self.task_config.DATA)
 
+        logger.info("Copy full YAML to COM")
+        src = os.path.join(self.task_config['DATA'], f"{self.task_config.APREFIX}letkfoi.yaml")
+        dest = os.path.join(self.task_config.COM_CONF, f"{self.task_config.APREFIX}letkfoi.yaml")
+        yaml_copy = {
+            'mkdir': [self.task_config.COM_CONF],
+            'copy': [[src, dest]]
+        }
+        FileHandler(yaml_copy).sync()
+
         logger.info("Copy analysis to COM")
         template = f'{to_fv3time(self.task_config.current_cycle)}.sfc_data.tile{{tilenum}}.nc'
         anllist = []
@@ -345,6 +358,16 @@ class LandAnalysis(Analysis):
             dest = os.path.join(self.task_config.COM_LAND_ANALYSIS, filename)
             anllist.append([src, dest])
         FileHandler({'copy': anllist}).sync()
+
+        logger.info('Copy increments to COM')
+        template = f'landinc.{to_fv3time(self.task_config.current_cycle)}.sfc_data.tile{{tilenum}}.nc'
+        inclist = []
+        for itile in range(1, self.task_config.ntiles + 1):
+            filename = template.format(tilenum=itile)
+            src = os.path.join(self.task_config.DATA, 'anl', filename)
+            dest = os.path.join(self.task_config.COM_LAND_ANALYSIS, filename)
+            inclist.append([src, dest])
+        FileHandler({'copy': inclist}).sync()
 
     @staticmethod
     @logit(logger)

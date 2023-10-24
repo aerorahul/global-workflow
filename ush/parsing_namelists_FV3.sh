@@ -12,10 +12,10 @@
 FV3_namelists(){
 
 # setup the tables
-DIAG_TABLE=${DIAG_TABLE:-${PARM_FV3DIAG}/diag_table}
-DIAG_TABLE_APPEND=${DIAG_TABLE_APPEND:-${PARM_FV3DIAG}/diag_table_aod}
-DATA_TABLE=${DATA_TABLE:-${PARM_FV3DIAG}/data_table}
-FIELD_TABLE=${FIELD_TABLE:-${PARM_FV3DIAG}/field_table}
+DIAG_TABLE=${DIAG_TABLE:-${HOMEgfs}/parm/ufs/fv3/diag_table}
+DIAG_TABLE_APPEND=${DIAG_TABLE_APPEND:-${HOMEgfs}/parm/ufs/fv3/diag_table_aod}
+DATA_TABLE=${DATA_TABLE:-${HOMEgfs}/parm/ufs/fv3/data_table}
+FIELD_TABLE=${FIELD_TABLE:-${HOMEgfs}/parm/ufs/fv3/field_table}
 
 # ensure non-prognostic tracers are set
 dnats=${dnats:-0}
@@ -345,6 +345,7 @@ cat >> input.nml <<EOF
   iopt_tbot    = ${iopt_tbot:-"2"}
   iopt_stc     = ${iopt_stc:-"1"}
   iopt_trs     = ${iopt_trs:-"2"}
+  iopt_diag    = ${iopt_diag:-"3"}
   debug        = ${gfs_phys_debug:-".false."}
   nstf_name    = ${nstf_name}
   nst_anl      = ${nst_anl}
@@ -420,6 +421,11 @@ if [[ ${DO_LAND_PERT:-"NO"} = "YES" ]]; then
   n_var_lndp = ${n_var_lndp:-0}
 EOF
 fi
+
+# Close &gfs_physics_nml section
+cat >> input.nml << EOF
+/
+EOF
 
 if [[ ${knob_ugwp_version} -eq 0 ]]; then
   cat >> input.nml << EOF
@@ -539,6 +545,7 @@ cat >> input.nml <<EOF
   FNVEGC   = '${FNVEGC}'
   FNVETC   = '${FNVETC}'
   FNSOTC   = '${FNSOTC}'
+  FNSOCC   = '${FNSOCC}'
   FNSMCC   = '${FNSMCC}'
   FNMSKH   = '${FNMSKH}'
   FNTSFA   = '${FNTSFA}'
