@@ -26,7 +26,7 @@ class LandAnalysis(Analysis):
     Class for global land analysis tasks
     """
 
-    NMEM_LANDENS = 2  # The size of the land ensemble is fixed at 2.  Does this need to be a variable?
+    NMEM_LANDENS = 2
 
     @logit(logger, name="LandAnalysis")
     def __init__(self, config):
