@@ -224,29 +224,28 @@ FV3_out() {
     done
   done
 
-  # Copy restarts in the assimilation window for RUN=gdas|enkfgdas|enkfgfs
-  if [[ "${RUN}" =~ "gdas" || "${RUN}" == "enkfgfs" ]]; then
-    local restart_date
-    restart_date=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
-    while (( restart_date < forecast_end_cycle )); do
-      echo "Copying FV3 restarts for 'RUN=${RUN}' at ${restart_date}"
-      for fv3_restart_file in "${fv3_restart_files[@]}"; do
-        restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${fv3_restart_file}"
-        ${NCP} "${DATArestart}/FV3_RESTART/${restart_file}" \
-               "${COM_ATMOS_RESTART}/${restart_file}"
-      done
-      restart_date=$(date --utc -d "${restart_date:0:8} ${restart_date:8:2} + ${restart_interval} hours" +%Y%m%d%H)
+  # Create an array of restart dates that need to be copied back to COM based on RUN
+  local rdate restart_dates
+  if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then  # Copy last restart files for RUN=gfs|gefs to COM
+    rdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${FHMAX} hours" +%Y%m%d.%H0000)
+    restart_dates=("${rdate}")
+  else  # Copy restart files for RUN=gdas|enkfgdas|enkfgfs to COM
+    local restart_hour
+    restart_dates=()
+    for restart_hour in "${FV3_RESTART_HR[@]}"; do
+      rdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_hour} hours" +%Y%m%d.%H0000)
+      restart_dates+=("${rdate}")
     done
   fi
 
-  # Copy the final restart files at the end of the forecast segment
-  # The final restart written at the end of the forecast does not include the valid date
-  # TODO: verify the above statement since RM found that it did!
-  echo "Copying FV3 restarts for 'RUN=${RUN}' at the end of the forecast segment: ${forecast_end_cycle}"
-  for fv3_restart_file in "${fv3_restart_files[@]}"; do
-    restart_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.${fv3_restart_file}"
-    ${NCP} "${DATArestart}/FV3_RESTART/${restart_file}" \
-           "${COM_ATMOS_RESTART}/${restart_file}"
+  # Copy restart files for the dates from above to COM
+  local restart_date
+  for restart_date in "${restart_dates[@]}"; do
+    echo "Copying FV3 restarts for 'RUN=${RUN}' at ${restart_date}"
+    for fv3_restart_file in "${fv3_restart_files[@]}"; do
+      ${NCP} "${DATArestart}/FV3_RESTART/${restart_date}.${fv3_restart_file}" \
+             "${COM_ATMOS_RESTART}/${restart_date}.${fv3_restart_file}"
+    done
   done
 
   echo "SUB ${FUNCNAME[0]}: Output data for FV3 copied"
@@ -407,52 +406,6 @@ MOM6_postdet() {
     fi
   fi  # if [[ "${RERUN}" == "NO" ]]; then
 
-  # Link output files
-  if [[ "${RUN}" =~ "gfs" || "${RUN}" == "gefs" ]]; then  # Link output files for RUN=gfs|enkfgfs|gefs
-
-    # Looping over MOM6 output hours
-    local fhr fhr3 last_fhr interval midpoint vdate vdate_mid source_file dest_file
-    for fhr in ${MOM6_OUTPUT_FH}; do
-      fhr3=$(printf %03i "${fhr}")
-
-      if [[ -z ${last_fhr:-} ]]; then
-        last_fhr=${fhr}
-        continue
-      fi
-
-      (( interval = fhr - last_fhr ))
-      (( midpoint = last_fhr + interval/2 ))
-
-      vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
-      vdate_mid=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${midpoint} hours" +%Y%m%d%H)
-
-      # Native model output uses window midpoint in the filename, but we are mapping that to the end of the period for COM
-      source_file="ocn_${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}.nc"
-      dest_file="${RUN}.ocean.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
-      ${NLN} "${COM_OCEAN_HISTORY}/${dest_file}" "${DATA}/MOM6_OUTPUT/${source_file}"
-
-      # Daily output
-      if (( fhr > 0 & fhr % 24 == 0 )); then
-        source_file="ocn_daily_${vdate:0:4}_${vdate:4:2}_${vdate:6:2}.nc"
-        dest_file="${RUN}.ocean.t${cyc}z.daily.f${fhr3}.nc"
-        ${NLN} "${COM_OCEAN_HISTORY}/${dest_file}" "${DATA}/MOM6_OUTPUT/${source_file}"
-      fi
-
-      last_fhr=${fhr}
-
-    done
-
-  elif [[ "${RUN}" =~ "gdas" ]]; then  # Link output files for RUN=gdas|enkfgdas
-
-    # Save (instantaneous) MOM6 backgrounds
-    local fhr3 vdatestr
-    for fhr in ${MOM6_OUTPUT_FH}; do
-      fhr3=$(printf %03i "${fhr}")
-      vdatestr=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y_%m_%d_%H)
-      ${NLN} "${COM_OCEAN_HISTORY}/${RUN}.ocean.t${cyc}z.inst.f${fhr3}.nc" "${DATA}/MOM6_OUTPUT/ocn_da_${vdatestr}.nc"
-    done
-  fi
-
   echo "SUB ${FUNCNAME[0]}: MOM6 input data linked/copied"
 
 }
@@ -511,6 +464,52 @@ MOM6_out() {
     done
   fi
 
+  # Copy output
+  if [[ "${RUN}" =~ "gfs" || "${RUN}" == "gefs" ]]; then  # Copy output files for RUN=gfs|enkfgfs|gefs
+
+    # Looping over MOM6 output hours
+    local fhr fhr3 last_fhr interval midpoint vdate vdate_mid source_file dest_file
+    for fhr in ${MOM6_OUTPUT_FH}; do
+      fhr3=$(printf %03i "${fhr}")
+
+      if [[ -z ${last_fhr:-} ]]; then
+        last_fhr=${fhr}
+        continue
+      fi
+
+      (( interval = fhr - last_fhr ))
+      (( midpoint = last_fhr + interval/2 ))
+
+      vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+      vdate_mid=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${midpoint} hours" +%Y%m%d%H)
+
+      # Native model output uses window midpoint in the filename, but we are mapping that to the end of the period for COM
+      source_file="ocn_${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}.nc"
+      dest_file="${RUN}.ocean.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
+      ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
+
+      # Daily output
+      if (( fhr > 0 & fhr % 24 == 0 )); then
+        source_file="ocn_daily_${vdate:0:4}_${vdate:4:2}_${vdate:6:2}.nc"
+        dest_file="${RUN}.ocean.t${cyc}z.daily.f${fhr3}.nc"
+        ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
+      fi
+
+      last_fhr=${fhr}
+
+    done
+
+  elif [[ "${RUN}" =~ "gdas" ]]; then  # copy output files for RUN=gdas|enkfgdas
+
+    # Save (instantaneous) MOM6 backgrounds
+    local fhr3 vdatestr
+    for fhr in ${MOM6_OUTPUT_FH}; do
+      fhr3=$(printf %03i "${fhr}")
+      vdatestr=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y_%m_%d_%H)
+      ${NCP} "${DATAoutput}/MOM6_OUTPUT/ocn_da_${vdatestr}.nc" "${COM_OCEAN_HISTORY}/${RUN}.ocean.t${cyc}z.inst.f${fhr3}.nc"
+    done
+  fi
+
 }
 
 CICE_postdet() {
@@ -541,34 +540,6 @@ CICE_postdet() {
   seconds=$(to_seconds "${current_cycle:8:2}0000")  # convert HHMMSS to seconds
   vdatestr="${current_cycle:0:4}-${current_cycle:4:2}-${current_cycle:6:2}-${seconds}"
   ${NLN} "${COM_ICE_HISTORY}/${RUN}.ice.t${cyc}z.ic.nc" "${DATA}/CICE_OUTPUT/iceh_ic.${vdatestr}.nc"
-
-  # Link CICE forecast output files from DATA/CICE_OUTPUT to COM
-  local source_file dest_file
-  for fhr in ${CICE_OUTPUT_FH}; do
-    fhr3=$(printf %03i "${fhr}")
-
-    if [[ -z ${last_fhr:-} ]]; then
-      last_fhr=${fhr}
-      continue
-    fi
-
-    (( interval = fhr - last_fhr ))
-
-    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
-    seconds=$(to_seconds "${vdate:8:2}0000")  # convert HHMMSS to seconds
-    vdatestr="${vdate:0:4}-${vdate:4:2}-${vdate:6:2}-${seconds}"
-
-    if [[ "${RUN}" =~ "gfs" || "${RUN}" =~ "gefs" ]]; then
-      source_file="iceh_$(printf "%0.2d" "${interval}")h.${vdatestr}.nc"
-      dest_file="${RUN}.ice.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
-    elif [[ "${RUN}" =~ "gdas" ]]; then
-      source_file="iceh_inst.${vdatestr}.nc"
-      dest_file="${RUN}.ice.t${cyc}z.inst.f${fhr3}.nc"
-    fi
-    ${NLN} "${COM_ICE_HISTORY}/${dest_file}" "${DATA}/CICE_OUTPUT/${source_file}"
-
-    last_fhr=${fhr}
-  done
 
 }
 
@@ -611,6 +582,34 @@ CICE_out() {
            "${COM_ICE_RESTART}/${target_file}"
   fi
 
+  # Copy CICE forecast output files to COM
+  local source_file dest_file
+  for fhr in ${CICE_OUTPUT_FH}; do
+    fhr3=$(printf %03i "${fhr}")
+
+    if [[ -z ${last_fhr:-} ]]; then
+      last_fhr=${fhr}
+      continue
+    fi
+
+    (( interval = fhr - last_fhr ))
+
+    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+    seconds=$(to_seconds "${vdate:8:2}0000")  # convert HHMMSS to seconds
+    vdatestr="${vdate:0:4}-${vdate:4:2}-${vdate:6:2}-${seconds}"
+
+    if [[ "${RUN}" =~ "gfs" || "${RUN}" =~ "gefs" ]]; then
+      source_file="iceh_$(printf "%0.2d" "${interval}")h.${vdatestr}.nc"
+      dest_file="${RUN}.ice.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
+    elif [[ "${RUN}" =~ "gdas" ]]; then
+      source_file="iceh_inst.${vdatestr}.nc"
+      dest_file="${RUN}.ice.t${cyc}z.inst.f${fhr3}.nc"
+    fi
+    ${NCP} "${DATAoutput}/CICE_OUTPUT/${source_file}" "${COM_ICE_HISTORY}/${dest_file}"
+
+    last_fhr=${fhr}
+  done
+
 }
 
 GOCART_rc() {
@@ -621,15 +620,30 @@ GOCART_rc() {
   # link directory containing GOCART input dataset, if provided
   if [[ -n "${AERO_INPUTS_DIR}" ]]; then
     ${NLN} "${AERO_INPUTS_DIR}" "${DATA}/ExtData"
-    status=$?
-    [[ ${status} -ne 0 ]] && exit "${status}"
+    rc=$?
+    (( rc != 0 )) && exit "${status}"
   fi
 
   # copying GOCART configuration files
-  if [[  -n "${AERO_CONFIG_DIR}" ]]; then
-    ${NCP} "${AERO_CONFIG_DIR}"/*.rc "${DATA}"
-    status=$?
-    [[ ${status} -ne 0 ]] && exit "${status}"
+  if [[ -n "${AERO_CONFIG_DIR}" ]]; then
+    ${NCP} "${AERO_CONFIG_DIR}"/*.rc "${DATA}"  # TODO: This should be expanded to files, not *
+    rc=$?
+    (( rc != 0 )) && exit "${status}"
+
+    # Create AERO_HISTORY.rc file
+    local AOD_FRQ="060000"  # TODO: confer w/ CRM on GW issue 2072.  This should be a variable, not hard-coded
+    local GOCART_OUTPUT_DIR="./GOCART_OUTPUT"
+    # Ensure the template exists
+    local template=${AERO_HISTORY_TEMPLATE:-"${PARMgfs}/ufs/gocart/AERO_HISTORY.rc.IN"}
+    if [[ ! -f "${template}" ]]; then
+      echo "FATAL ERROR: template '${template}' does not exist, ABORT!"
+      exit 1
+    fi
+    rm -f "${DATA}/AERO_HISTORY.rc"
+    atparse < "${template}" >> "${DATA}/AERO_HISTORY.rc"
+    echo "Rendered AERO_HISTORY.rc:"
+    cat "${DATA}/AERO_HISTORY.rc"
+
     # attempt to generate ExtData configuration file if not provided
     if [[ ! -f "${DATA}/AERO_ExtData.rc" ]]; then
       { \
@@ -638,8 +652,6 @@ GOCART_rc() {
         cat "${AERO_CONFIG_DIR}/ExtData.${AERO_EMIS_FIRE:-none}" ; \
         echo "%%" ; \
       } > "${DATA}/AERO_ExtData.rc"
-      status=$?
-      if (( status != 0 )); then exit "${status}"; fi
     fi
   fi
 }
@@ -647,18 +659,15 @@ GOCART_rc() {
 GOCART_postdet() {
   echo "SUB ${FUNCNAME[0]}: Linking output data for GOCART"
 
-  local vdate
+  local fhr vdate
   for fhr in ${GOCART_OUTPUT_FH}; do
     vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
 
-    # Temporarily delete existing files due to noclobber in GOCART
-    if [[ -e "${COM_CHEM_HISTORY}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" ]]; then
-      rm -f "${COM_CHEM_HISTORY}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4"
+    # Delete existing files due to noclobber in GOCART
+    if [[ -e "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" ]]; then
+      rm -f "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4"
     fi
 
-    #TODO: Temporarily removing this as this will crash gocart, adding copy statement at the end
-    #${NLN} "${COM_CHEM_HISTORY}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" \
-    #       "${DATA}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4"
   done
 }
 
@@ -666,14 +675,13 @@ GOCART_out() {
   echo "SUB ${FUNCNAME[0]}: Copying output data for GOCART"
 
   # Copy gocart.inst_aod after the forecast is run (and successfull)
-  # TODO: this should be linked but there are issues where gocart crashing if it is linked
-  local fhr
-  local vdate
+  local fhr fhr3 vdate
   for fhr in ${GOCART_OUTPUT_FH}; do
     if (( fhr == 0 )); then continue; fi
+    fhr3=$(printf %03i "${fhr}")
     vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
-    ${NCP} "${DATA}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" \
-      "${COM_CHEM_HISTORY}/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4"
+    ${NCP} "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" \
+           "${COM_CHEM_HISTORY}/${RUN}.gocart.t${cyc}z.inst_aod.${fhr3}.nc4"
   done
 }
 

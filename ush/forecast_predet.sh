@@ -80,14 +80,27 @@ FV3_predet(){
   if [[ ! -d "${COM_ATMOS_MASTER}" ]]; then mkdir -p "${COM_ATMOS_MASTER}"; fi
   if [[ ! -d "${COM_ATMOS_RESTART}" ]]; then mkdir -p "${COM_ATMOS_RESTART}"; fi
   if [[ ! -d "${DATArestart}/FV3_RESTART" ]]; then mkdir -p "${DATArestart}/FV3_RESTART"; fi
+  if [[ ! -d "${DATAoutput}/FV3_OUTPUT" ]]; then mkdir -p "${DATAoutput}/FV3_OUTPUT"; fi
+
   ${NLN} "${DATArestart}/FV3_RESTART" "${DATA}/RESTART"
+  ${NLN} "${DATAoutput}/FV3_OUTPUT"   "${DATA}/FV3_OUTPUT"
 
   FHZER=${FHZER:-6}
   FHCYC=${FHCYC:-24}
   restart_interval=${restart_interval:-${FHMAX}}
   # restart_interval = 0 implies write restart at the END of the forecast i.e. at FHMAX
+  # Convert restart interval into an explicit list for FV3
   if (( restart_interval == 0 )); then
     restart_interval=${FHMAX}
+    FV3_RESTART_FH=("${restart_interval}")
+  else
+    # shellcheck disable=SC2312
+    mapfile -t FV3_RESTART_FH < <(seq "${restart_interval}" "${restart_interval}" "${FHMAX}")
+    # If the last forecast hour is not in the array, add it
+    local nrestarts=${#FV3_RESTART_FH[@]}
+    if (( FV3_RESTART_FH[nrestarts-1] != FHMAX )); then
+      FV3_RESTART_FH+=("${FHMAX}")
+    fi
   fi
 
   # Convert output settings into an explicit list for FV3
@@ -456,9 +469,11 @@ WW3_predet(){
 
   if [[ ! -d "${COM_WAVE_HISTORY}" ]]; then mkdir -p "${COM_WAVE_HISTORY}"; fi
   if [[ ! -d "${COM_WAVE_RESTART}" ]]; then mkdir -p "${COM_WAVE_RESTART}" ; fi
-
   if [[ ! -d "${DATArestart}/WAVE_RESTART" ]]; then mkdir -p "${DATArestart}/WAVE_RESTART"; fi
+  if [[ ! -d "${DATAoutput}/WAVE_OUTPUT" ]]; then mkdir -p "${DATAoutput}/WAVE_OUTPUT"; fi
+
   ${NLN} "${DATArestart}/WAVE_RESTART" "${DATA}/restart_wave"
+  ${NLN} "${DATAoutput}/WAVE_OUTPUT"   "${DATA}/output_wave"
 
   # Files from wave prep and wave init jobs
   # Copy mod_def files for wave grids
@@ -533,10 +548,11 @@ CICE_predet(){
   if [[ ! -d "${COM_ICE_HISTORY}" ]]; then mkdir -p "${COM_ICE_HISTORY}"; fi
   if [[ ! -d "${COM_ICE_RESTART}" ]]; then mkdir -p "${COM_ICE_RESTART}"; fi
   if [[ ! -d "${COM_ICE_INPUT}" ]]; then mkdir -p "${COM_ICE_INPUT}"; fi
-
-  if [[ ! -d "${DATA}/CICE_OUTPUT" ]]; then  mkdir -p "${DATA}/CICE_OUTPUT"; fi
   if [[ ! -d "${DATArestart}/CICE_RESTART" ]]; then mkdir -p "${DATArestart}/CICE_RESTART"; fi
+  if [[ ! -d "${DATAoutput}/CICE_OUTPUT" ]]; then  mkdir -p "${DATAoutput}/CICE_OUTPUT"; fi
+
   ${NLN} "${DATArestart}/CICE_RESTART" "${DATA}/CICE_RESTART"
+  ${NLN} "${DATAoutput}/CICE_OUTPUT"   "${DATA}/CICE_OUTPUT"
 
   # CICE does not have a concept of high frequency output like FV3
   # Convert output settings into an explicit list for CICE
@@ -556,10 +572,11 @@ MOM6_predet(){
   if [[ ! -d "${COM_OCEAN_HISTORY}" ]]; then mkdir -p "${COM_OCEAN_HISTORY}"; fi
   if [[ ! -d "${COM_OCEAN_RESTART}" ]]; then mkdir -p "${COM_OCEAN_RESTART}"; fi
   if [[ ! -d "${COM_OCEAN_INPUT}" ]]; then mkdir -p "${COM_OCEAN_INPUT}"; fi
-
-  if [[ ! -d "${DATA}/MOM6_OUTPUT" ]]; then mkdir -p "${DATA}/MOM6_OUTPUT"; fi
   if [[ ! -d "${DATArestart}/MOM6_RESTART" ]]; then mkdir -p "${DATArestart}/MOM6_RESTART"; fi
+  if [[ ! -d "${DATAoutput}/MOM6_OUTPUT" ]]; then mkdir -p "${DATAoutput}/MOM6_OUTPUT"; fi
+
   ${NLN} "${DATArestart}/MOM6_RESTART" "${DATA}/MOM6_RESTART"
+  ${NLN} "${DATAoutput}/MOM6_OUTPUT"   "${DATA}/MOM6_OUTPUT"
 
   # MOM6 does not have a concept of high frequency output like FV3
   # Convert output settings into an explicit list for MOM6
@@ -599,8 +616,8 @@ CMEPS_predet(){
   echo "SUB ${FUNCNAME[0]}: CMEPS before run type determination"
 
   if [[ ! -d "${COM_MED_RESTART}" ]]; then mkdir -p "${COM_MED_RESTART}"; fi
-
   if [[ ! -d "${DATArestart}/CMEPS_RESTART" ]]; then mkdir -p "${DATArestart}/CMEPS_RESTART"; fi
+
   ${NLN} "${DATArestart}/CMEPS_RESTART" "${DATA}/CMEPS_RESTART"
 
 }
@@ -610,6 +627,9 @@ GOCART_predet(){
   echo "SUB ${FUNCNAME[0]}: GOCART before run type determination"
 
   if [[ ! -d "${COM_CHEM_HISTORY}" ]]; then mkdir -p "${COM_CHEM_HISTORY}"; fi
+  if [[ ! -d "${DATAoutput}/GOCART_OUTPUT" ]]; then mkdir -p "${DATAoutput}/GOCART_OUTPUT"; fi
+
+  ${NLN} "${DATAoutput}/GOCART_OUTPUT" "${DATA}/GOCART_OUTPUT"
 
   GOCART_OUTPUT_FH=$(seq -s ' ' "${FHMIN}" "6" "${FHMAX}")
   # TODO: AERO_HISTORY.rc has hardwired output frequency to 6 hours
