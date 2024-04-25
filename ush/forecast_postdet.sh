@@ -232,7 +232,7 @@ FV3_out() {
   else  # Copy restart files for RUN=gdas|enkfgdas|enkfgfs to COM
     local restart_hour
     restart_dates=()
-    for restart_hour in "${FV3_RESTART_HR[@]}"; do
+    for restart_hour in "${FV3_RESTART_FH[@]}"; do
       rdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_hour} hours" +%Y%m%d.%H0000)
       restart_dates+=("${rdate}")
     done
