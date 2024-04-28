@@ -107,7 +107,7 @@ function wait_for_file() {
 }
 
 function detect_py_ver() {
-    # 
+    #
     # Returns the major.minor version of the currently active python executable
     #
     regex="[0-9]+\.[0-9]+"
@@ -119,8 +119,73 @@ function detect_py_ver() {
 	    exit 1
     fi
 }
-# shellcheck disable=
 
+function tic() {
+    #
+    # Start a timer
+    #
+    if [[ ${DEBUG_WORKFLOW:-"NO"} == "NO" ]]; then set +x; fi
+    local start_time
+    start_time=$(date +%s)
+    local tag_name=$1
+
+    # Initialize timing_stack if not already declared
+    if [[ -z ${timing_stack+x} ]]; then
+        declare -ag timing_stack
+    fi
+
+    if [[ -z "${tag_name}" ]]; then
+        tag_name="unnamed"
+    fi
+
+    timing_stack+=("${tag_name},${start_time}")
+
+    echo "Profiling ${tag_name} started at ${start_time}"
+    set_trace
+}
+
+# Define the function to stop the timer and calculate elapsed time
+toc() {
+    #
+    # Stop the timer
+    #
+    if [[ ${DEBUG_WORKFLOW:-"NO"} == "NO" ]]; then set +x; fi
+    local start_time end_time elapsed_time
+    end_time=$(date +%s)
+
+    local tag_name=$1
+
+    if [[ -z "${tag_name}" ]]; then
+        tag_name="unnamed"
+    fi
+
+    # Check if timing_stack is empty
+    if [[ ${#timing_stack[@]} -eq 0 ]]; then
+        echo "Error: No active timers to stop."
+        return
+    fi
+
+    # Pop the last entry from the timing stack
+    local last_entry tag_name_array
+    last_entry="${timing_stack[-1]}"
+    IFS=',' read -ra entry <<< "${last_entry}"
+    tag_name_array="${entry[0]}"
+    start_time="${entry[1]}"
+    unset "timing_stack[-1]"
+
+    elapsed_time=$((end_time - start_time))
+
+    if [[ "${tag_name}" != "${tag_name_array}" ]]; then
+        echo "WARNING: Profiling ${tag_name} does not match the last started tag ${tag_name_array}" \
+            "(${start_time})"
+    fi
+    echo "Profiling ${tag_name} done, elapsed time ${elapsed_time} seconds"
+    set_trace
+}
+
+# shellcheck disable=
 declare -xf declare_from_tmpl
 declare -xf wait_for_file
 declare -xf detect_py
+declare -xf tic
+declare -xf toc

@@ -38,7 +38,8 @@ nhour(){
 
 # shellcheck disable=SC2034
 common_predet(){
-  echo "SUB ${FUNCNAME[0]}: Defining variables for shared through model components"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   CDUMP=${CDUMP:-gdas}
   rCDUMP=${rCDUMP:-${CDUMP}}
@@ -70,11 +71,14 @@ common_predet(){
   # Several model components share DATA/INPUT for input data
   if [[ ! -d "${DATA}/INPUT" ]]; then mkdir -p "${DATA}/INPUT"; fi
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 # shellcheck disable=SC2034
 FV3_predet(){
-  echo "SUB ${FUNCNAME[0]}: Defining variables for FV3"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ ! -d "${COM_ATMOS_HISTORY}" ]]; then mkdir -p "${COM_ATMOS_HISTORY}"; fi
   if [[ ! -d "${COM_ATMOS_MASTER}" ]]; then mkdir -p "${COM_ATMOS_MASTER}"; fi
@@ -460,12 +464,15 @@ FV3_predet(){
     ${NCP} "${POSTGRB2TBL:-${PARMgfs}/post/params_grib2_tbl_new}"             "${DATA}/params_grib2_tbl_new"
   fi
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 # Disable variable not used warnings
 # shellcheck disable=SC2034
 WW3_predet(){
-  echo "SUB ${FUNCNAME[0]}: WW3 before run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ ! -d "${COM_WAVE_HISTORY}" ]]; then mkdir -p "${COM_WAVE_HISTORY}"; fi
   if [[ ! -d "${COM_WAVE_RESTART}" ]]; then mkdir -p "${COM_WAVE_RESTART}" ; fi
@@ -539,11 +546,15 @@ WW3_predet(){
       exit 4
     fi
   fi
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 # shellcheck disable=SC2034
 CICE_predet(){
-  echo "SUB ${FUNCNAME[0]}: CICE before run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ ! -d "${COM_ICE_HISTORY}" ]]; then mkdir -p "${COM_ICE_HISTORY}"; fi
   if [[ ! -d "${COM_ICE_RESTART}" ]]; then mkdir -p "${COM_ICE_RESTART}"; fi
@@ -563,11 +574,14 @@ CICE_predet(){
   ${NCP} "${FIXgfs}/cice/${ICERES}/${CICE_MASK}" "${DATA}/"
   ${NCP} "${FIXgfs}/cice/${ICERES}/${MESH_ICE}"  "${DATA}/"
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 # shellcheck disable=SC2034
 MOM6_predet(){
-  echo "SUB ${FUNCNAME[0]}: MOM6 before run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ ! -d "${COM_OCEAN_HISTORY}" ]]; then mkdir -p "${COM_OCEAN_HISTORY}"; fi
   if [[ ! -d "${COM_OCEAN_RESTART}" ]]; then mkdir -p "${COM_OCEAN_RESTART}"; fi
@@ -610,21 +624,27 @@ MOM6_predet(){
     exit 3
   fi
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 CMEPS_predet(){
-  echo "SUB ${FUNCNAME[0]}: CMEPS before run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ ! -d "${COM_MED_RESTART}" ]]; then mkdir -p "${COM_MED_RESTART}"; fi
   if [[ ! -d "${DATArestart}/CMEPS_RESTART" ]]; then mkdir -p "${DATArestart}/CMEPS_RESTART"; fi
 
   ${NLN} "${DATArestart}/CMEPS_RESTART" "${DATA}/CMEPS_RESTART"
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 # shellcheck disable=SC2034
 GOCART_predet(){
-  echo "SUB ${FUNCNAME[0]}: GOCART before run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ ! -d "${COM_CHEM_HISTORY}" ]]; then mkdir -p "${COM_CHEM_HISTORY}"; fi
   if [[ ! -d "${DATAoutput}/GOCART_OUTPUT" ]]; then mkdir -p "${DATAoutput}/GOCART_OUTPUT"; fi
@@ -632,5 +652,9 @@ GOCART_predet(){
   ${NLN} "${DATAoutput}/GOCART_OUTPUT" "${DATA}/GOCART_OUTPUT"
 
   GOCART_OUTPUT_FH=$(seq -s ' ' "${FHMIN}" "6" "${FHMAX}")
-  # TODO: AERO_HISTORY.rc has hardwired output frequency to 6 hours
+  # TODO: AERO_HISTORY.rc.IN has a template variable @[AOD_FRQ] that is set to 060000 in ush/forecast_postdet.sh GOCART_rc()
+  # Check w/ CRM on how to set this in one place and what should it be? assim_freq?
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }

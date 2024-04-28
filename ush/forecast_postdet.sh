@@ -3,10 +3,8 @@
 # Disable variable not used warnings
 # shellcheck disable=SC2034
 FV3_postdet() {
-  echo "SUB ${FUNCNAME[0]}: Entering for RUN = ${RUN}"
-
-  echo "warm_start = ${warm_start}"
-  echo "RERUN = ${RERUN}"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   # cold start case
   if [[ "${warm_start}" == ".false." ]]; then
@@ -168,35 +166,12 @@ EOF
 
   fi  # warm_start == .true.
 
-  cd "${DATA}" || exit 1
-  if [[ "${QUILTING}" = ".true." ]] && [[ "${OUTPUT_GRID}" = "gaussian_grid" ]]; then
-    local FH2 FH3
-    for fhr in ${FV3_OUTPUT_FH}; do
-      FH3=$(printf %03i "${fhr}")
-      FH2=$(printf %02i "${fhr}")
-      ${NLN} "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.atmf${FH3}.nc" "atmf${FH3}.nc"
-      ${NLN} "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.sfcf${FH3}.nc" "sfcf${FH3}.nc"
-      ${NLN} "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.atm.logf${FH3}.txt" "log.atm.f${FH3}"
-      if [[ "${WRITE_DOPOST}" == ".true." ]]; then
-        ${NLN} "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.master.grb2f${FH3}" "GFSPRS.GrbF${FH2}"
-        ${NLN} "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.sfluxgrbf${FH3}.grib2" "GFSFLX.GrbF${FH2}"
-      fi
-    done
-  else  # TODO: Is this even valid anymore?
-    local nn
-    for (( nn = 1; nn <= ntiles; nn++ )); do
-      ${NLN} "nggps2d.tile${nn}.nc"       "${COM_ATMOS_HISTORY}/nggps2d.tile${nn}.nc"
-      ${NLN} "nggps3d.tile${nn}.nc"       "${COM_ATMOS_HISTORY}/nggps3d.tile${nn}.nc"
-      ${NLN} "grid_spec.tile${nn}.nc"     "${COM_ATMOS_HISTORY}/grid_spec.tile${nn}.nc"
-      ${NLN} "atmos_static.tile${nn}.nc"  "${COM_ATMOS_HISTORY}/atmos_static.tile${nn}.nc"
-      ${NLN} "atmos_4xdaily.tile${nn}.nc" "${COM_ATMOS_HISTORY}/atmos_4xdaily.tile${nn}.nc"
-    done
-  fi
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 FV3_nml() {
-  # namelist output for a certain component
-  echo "SUB ${FUNCNAME[0]}: Creating name lists and model configure file for FV3"
+  echo "SUB ${FUNCNAME[0]}: Creating namelist and model_configure file for FV3"
 
   source "${USHgfs}/parsing_namelists_FV3.sh"
   source "${USHgfs}/parsing_model_configure_FV3.sh"
@@ -204,11 +179,11 @@ FV3_nml() {
   FV3_namelists
   FV3_model_configure
 
-  echo "SUB ${FUNCNAME[0]}: FV3 name lists and model configure file created"
 }
 
 FV3_out() {
-  echo "SUB ${FUNCNAME[0]}: copying output data for FV3"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   # Copy configuration files
   if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then
@@ -254,13 +229,33 @@ FV3_out() {
            "${COM_ATMOS_RESTART}/${restart_file}"
   done
 
-  echo "SUB ${FUNCNAME[0]}: Output data for FV3 copied"
+  # Copy FV3 history and inline post output to COM
+  local FH2 FH3
+  for fhr in ${FV3_OUTPUT_FH}; do
+    FH3=$(printf %03i "${fhr}")
+    FH2=$(printf %02i "${fhr}")
+
+    # TODO: Replace ${DATA} with ${DATAoutput}/FV3_OUTPUT after UFWM PR 2554 is merged
+    ${NCP} "${DATA}/atmf${FH3}.nc"   "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.atmf${FH3}.nc"
+    ${NCP} "${DATA}/sfcf${FH3}.nc"   "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.sfcf${FH3}.nc"
+    ${NCP} "${DATA}/log.atm.f${FH3}" "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.atm.logf${FH3}.txt"
+
+    if [[ "${WRITE_DOPOST}" == ".true." ]]; then
+      ${NCP} "${DATA}/GFSPRS.GrbF${FH2}"          "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.master.grb2f${FH3}"
+      ${NCP} "${DATA}/GFSFLX.GrbF${FH2}"          "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.sfluxgrbf${FH3}.grib2"
+      ${NCP} "${DATA}/log.atm.inlinepost.f${FH3}" "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.upp.logf${FH3}.txt"
+    fi
+  done
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 # Disable variable not used warnings
 # shellcheck disable=SC2034
 WW3_postdet() {
-  echo "SUB ${FUNCNAME[0]}: Linking input data for WW3"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   local ww3_grid
   # Copy initial condition files:
@@ -301,29 +296,48 @@ WW3_postdet() {
     echo "WW3 will start from rest!"
   fi  # [[ "${warm_start}" == ".true." ]]
 
-  # Link output files
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
+}
+
+WW3_nml() {
+  echo "SUB ${FUNCNAME[0]}: Creating namelist for WW3"
+
+  source "${USHgfs}/parsing_namelists_WW3.sh"
+  WW3_namelists
+}
+
+WW3_out() {
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
+  # TODO: Need to add logic to copy restarts from DATArestart/WW3_RESTART to COM_WAVE_RESTART
+
+  local ww3_grid
+
+  # Copy WW3 output files
+  # TODO: Replace ${DATA} with ${DATAoutput}/WW3_OUTPUT after WW3 issue 1221 is resolved
   local wavprfx="${RUN}wave${WAV_MEMBER:-}"
   if [[ "${waveMULTIGRID}" == ".true." ]]; then
-    ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.log.mww3.${PDY}${cyc}" "log.mww3"
+    ${NCP} "${DATA}/log.mww3" "${COM_WAVE_HISTORY}/${wavprfx}.log.mww3.${PDY}${cyc}"
     for ww3_grid in ${waveGRD}; do
-      ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.log.${ww3_grid}.${PDY}${cyc}" "log.${ww3_grid}"
+      ${NCP} "${DATA}/log.${ww3_grid}" "${COM_WAVE_HISTORY}/${wavprfx}.log.${ww3_grid}.${PDY}${cyc}"
     done
   else
-    ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.log.${waveGRD}.${PDY}${cyc}" "log.ww3"
+    ${NCP} "${DATA}/log.ww3" "${COM_WAVE_HISTORY}/${wavprfx}.log.${waveGRD}.${PDY}${cyc}"
   fi
 
   # Loop for gridded output (uses FHINC)
-  local fhr vdate FHINC ww3_grid
+  local fhr fhinc vdate
   fhr=${FHMIN_WAV}
   fhinc=${FHOUT_WAV}
   while (( fhr <= FHMAX_WAV )); do
     vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d.%H0000)
     if [[ "${waveMULTIGRID}" == ".true." ]]; then
       for ww3_grid in ${waveGRD} ; do
-        ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${ww3_grid}.${vdate}" "${DATA}/${vdate}.out_grd.${ww3_grid}"
+        ${NCP} "${DATA}/${vdate}.out_grd.${ww3_grid}" "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${ww3_grid}.${vdate}"
       done
     else
-      ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${waveGRD}.${vdate}" "${DATA}/${vdate}.out_grd.ww3"
+      ${NCP} "${DATA}/${vdate}.out_grd.ww3" "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${waveGRD}.${vdate}"
     fi
     if (( FHMAX_HF_WAV > 0 && FHOUT_HF_WAV > 0 && fhr < FHMAX_HF_WAV )); then
       fhinc=${FHOUT_HF_WAV}
@@ -337,35 +351,33 @@ WW3_postdet() {
   while (( fhr <= FHMAX_WAV )); do
     vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d.%H0000)
     if [[ "${waveMULTIGRID}" == ".true." ]]; then
-      ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}" "${DATA}/${vdate}.out_pnt.${waveuoutpGRD}"
+      ${NCP} "${DATA}/${vdate}.out_pnt.${waveuoutpGRD}" "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}"
     else
-      ${NLN} "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}" "${DATA}/${vdate}.out_pnt.ww3"
+      ${NCP} "${DATA}/${vdate}.out_pnt.ww3" "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}"
     fi
     fhr=$((fhr + fhinc))
   done
-}
 
-WW3_nml() {
-  echo "SUB ${FUNCNAME[0]}: Copying input files for WW3"
-  source "${USHgfs}/parsing_namelists_WW3.sh"
-  WW3_namelists
-}
-
-WW3_out() {
-  echo "SUB ${FUNCNAME[0]}: Copying output data for WW3"
-  # TODO: Need to add logic to copy restarts from DATArestart/WW3_RESTART to COM_WAVE_RESTART
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 
 CPL_out() {
-  echo "SUB ${FUNCNAME[0]}: Copying output data for general cpl fields"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
+
   if [[ "${esmf_profile:-}" == ".true." ]]; then
     ${NCP} "${DATA}/ESMF_Profile.summary" "${COM_ATMOS_HISTORY}/ESMF_Profile.summary"
   fi
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 MOM6_postdet() {
-  echo "SUB ${FUNCNAME[0]}: MOM6 after run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   local restart_dir restart_date
   if [[ "${RERUN}" == "YES" ]]; then
@@ -412,18 +424,21 @@ MOM6_postdet() {
     fi
   fi  # if [[ "${RERUN}" == "NO" ]]; then
 
-  echo "SUB ${FUNCNAME[0]}: MOM6 input data linked/copied"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
 }
 
 MOM6_nml() {
-  echo "SUB ${FUNCNAME[0]}: Creating name list for MOM6"
+  echo "SUB ${FUNCNAME[0]}: Creating namelist for MOM6"
+
   source "${USHgfs}/parsing_namelists_MOM6.sh"
   MOM6_namelists
 }
 
 MOM6_out() {
-  echo "SUB ${FUNCNAME[0]}: Copying output data for MOM6"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   # Copy MOM_input from DATA to COM_OCEAN_INPUT after the forecast is run (and successfull)
   ${NCP} "${DATA}/INPUT/MOM_input" "${COM_CONF}/ufs.MOM_input"
@@ -470,11 +485,12 @@ MOM6_out() {
     done
   fi
 
-  # Copy output
+  # Copy MOM6 output to COM
+  local fhr fhr3 vdate vdatestr source_file dest_file
   if [[ "${RUN}" =~ "gfs" || "${RUN}" == "gefs" ]]; then  # Copy output files for RUN=gfs|enkfgfs|gefs
 
     # Looping over MOM6 output hours
-    local fhr fhr3 last_fhr interval midpoint vdate vdate_mid source_file dest_file
+    local last_fhr interval midpoint vdate_mid
     for fhr in ${MOM6_OUTPUT_FH}; do
       fhr3=$(printf %03i "${fhr}")
 
@@ -490,13 +506,15 @@ MOM6_out() {
       vdate_mid=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${midpoint} hours" +%Y%m%d%H)
 
       # Native model output uses window midpoint in the filename, but we are mapping that to the end of the period for COM
-      source_file="ocn_${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}.nc"
+      vdatestr="${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}"
+      source_file="ocn_${vdatestr}.nc"
       dest_file="${RUN}.ocean.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
       ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
 
       # Daily output
       if (( fhr > 0 & fhr % 24 == 0 )); then
-        source_file="ocn_daily_${vdate:0:4}_${vdate:4:2}_${vdate:6:2}.nc"
+        vdatestr="${vdate:0:4}_${vdate:4:2}_${vdate:6:2}"
+        source_file="ocn_daily_${vdatestr}.nc"
         dest_file="${RUN}.ocean.t${cyc}z.daily.f${fhr3}.nc"
         ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
       fi
@@ -508,18 +526,24 @@ MOM6_out() {
   elif [[ "${RUN}" =~ "gdas" ]]; then  # copy output files for RUN=gdas|enkfgdas
 
     # Save (instantaneous) MOM6 backgrounds
-    local fhr3 vdatestr
     for fhr in ${MOM6_OUTPUT_FH}; do
       fhr3=$(printf %03i "${fhr}")
-      vdatestr=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y_%m_%d_%H)
-      ${NCP} "${DATAoutput}/MOM6_OUTPUT/ocn_da_${vdatestr}.nc" "${COM_OCEAN_HISTORY}/${RUN}.ocean.t${cyc}z.inst.f${fhr3}.nc"
+      vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+      vdatestr="${vdate:0:4}_${vdate:4:2}_${vdate:6:2}_${vdate:8:2}"
+      source_file="ocn_da_${vdatestr}.nc"
+      dest_file="${RUN}.ocean.t${cyc}z.inst.f${fhr3}.nc"
+      ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
     done
   fi
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 
 }
 
 CICE_postdet() {
-  echo "SUB ${FUNCNAME[0]}: CICE after run type determination"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   local restart_date cice_restart_file
   if [[ "${RERUN}" == "YES" ]]; then
@@ -540,23 +564,20 @@ CICE_postdet() {
   ${NCP} "${cice_restart_file}" "${DATA}/cice_model.res.nc" \
   || ( echo "FATAL ERROR: Unable to copy CICE IC, ABORT!"; exit 1 )
 
-  # Link iceh_ic file to COM.  This is the initial condition file from CICE (f000)
-  # TODO: Is this file needed in COM? Is this going to be used for generating any products?
-  local vdate seconds vdatestr fhr fhr3 interval last_fhr
-  seconds=$(to_seconds "${current_cycle:8:2}0000")  # convert HHMMSS to seconds
-  vdatestr="${current_cycle:0:4}-${current_cycle:4:2}-${current_cycle:6:2}-${seconds}"
-  ${NLN} "${COM_ICE_HISTORY}/${RUN}.ice.t${cyc}z.ic.nc" "${DATA}/CICE_OUTPUT/iceh_ic.${vdatestr}.nc"
-
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 CICE_nml() {
-  echo "SUB ${FUNCNAME[0]}: Creating name list for CICE"
+  echo "SUB ${FUNCNAME[0]}: Creating namelist for CICE"
+
   source "${USHgfs}/parsing_namelists_CICE.sh"
   CICE_namelists
 }
 
 CICE_out() {
-  echo "SUB ${FUNCNAME[0]}: Copying output data for CICE"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   # Copy ice_in namelist from DATA to COMOUTice after the forecast is run (and successfull)
   ${NCP} "${DATA}/ice_in" "${COM_CONF}/ufs.ice_in"
@@ -589,7 +610,16 @@ CICE_out() {
   fi
 
   # Copy CICE forecast output files to COM
-  local source_file dest_file
+
+  # Link iceh_ic file to COM.  This is the initial condition file from CICE (f000)
+  # TODO: Is this file needed in COM? Is this going to be used for generating any products?
+  #local vdate seconds vdatestr fhr fhr3 interval last_fhr
+  #seconds=$(to_seconds "${current_cycle:8:2}0000")  # convert HHMMSS to seconds
+  #vdatestr="${current_cycle:0:4}-${current_cycle:4:2}-${current_cycle:6:2}-${seconds}"
+  #${NCP} "${DATA}/CICE_OUTPUT/iceh_ic.${vdatestr}.nc" "${COM_ICE_HISTORY}/${RUN}.ice.t${cyc}z.ic.nc"
+
+  local fhr fhr3 vdate vdatestr source_file dest_file
+  local last_fhr interval
   for fhr in ${CICE_OUTPUT_FH}; do
     fhr3=$(printf %03i "${fhr}")
 
@@ -616,16 +646,16 @@ CICE_out() {
     last_fhr=${fhr}
   done
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 GOCART_rc() {
-  echo "SUB ${FUNCNAME[0]}: Linking input data and copying config files for GOCART"
-  # set input directory containing GOCART input data and configuration files
-  # this variable is platform-dependent and should be set via a YAML file
+  echo "SUB ${FUNCNAME[0]}: Copy input data and config files for GOCART"
 
   # link directory containing GOCART input dataset, if provided
   if [[ -n "${AERO_INPUTS_DIR}" ]]; then
-    ${NLN} "${AERO_INPUTS_DIR}" "${DATA}/ExtData"
+    ${NLN} "${AERO_INPUTS_DIR}" "${DATA}/ExtData"  # TODO: Link should be replaced with copy per EE2 requirment
     rc=$?
     (( rc != 0 )) && exit "${status}"
   fi
@@ -637,7 +667,7 @@ GOCART_rc() {
     (( rc != 0 )) && exit "${status}"
 
     # Create AERO_HISTORY.rc file
-    local AOD_FRQ="060000"  # TODO: confer w/ CRM on GW issue 2072.  This should be a variable, not hard-coded
+    local AOD_FRQ="060000"  # TODO: confer w/ CRM on GW issue 2072.  This should be a variable, not hard-coded. Also see GOCART_predet in ush/forecast_predet.sh
     local GOCART_OUTPUT_DIR="./GOCART_OUTPUT"
     # Ensure the template exists
     local template=${AERO_HISTORY_TEMPLATE:-"${PARMgfs}/ufs/gocart/AERO_HISTORY.rc.IN"}
@@ -660,10 +690,12 @@ GOCART_rc() {
       } > "${DATA}/AERO_ExtData.rc"
     fi
   fi
+
 }
 
 GOCART_postdet() {
-  echo "SUB ${FUNCNAME[0]}: Linking output data for GOCART"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   local fhr vdate
   for fhr in ${GOCART_OUTPUT_FH}; do
@@ -675,10 +707,14 @@ GOCART_postdet() {
     fi
 
   done
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 GOCART_out() {
-  echo "SUB ${FUNCNAME[0]}: Copying output data for GOCART"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   # Copy gocart.inst_aod after the forecast is run (and successfull)
   local fhr fhr3 vdate
@@ -689,10 +725,14 @@ GOCART_out() {
     ${NCP} "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" \
            "${COM_CHEM_HISTORY}/${RUN}.gocart.t${cyc}z.inst_aod.${fhr3}.nc4"
   done
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 CMEPS_postdet() {
-  echo "SUB ${FUNCNAME[0]}: Linking output data for CMEPS mediator"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   if [[ "${warm_start}" == ".true." ]]; then
 
@@ -732,10 +772,14 @@ CMEPS_postdet() {
     fi
 
   fi  # [[ "${warm_start}" == ".true." ]];
+
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }
 
 CMEPS_out() {
-  echo "SUB ${FUNCNAME[0]}: Copying output data for CMEPS mediator"
+  echo "Entering ${FUNCNAME[0]}"
+  tic "${FUNCNAME[0]}"
 
   # Copy mediator restarts at the end of the forecast segment to COM for RUN=gfs|gefs
   echo "Copying mediator restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
@@ -770,4 +814,6 @@ CMEPS_out() {
     fi
   fi
 
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 }

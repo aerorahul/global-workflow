@@ -36,6 +36,7 @@ local WRITE_DOPOST=${WRITE_DOPOST:-".false."}
 local WRITE_NSFLIP=${WRITE_NSFLIP:-".false."}
 local NUM_FILES=${NUM_FILES:-2}
 local FILENAME_BASE="'atm' 'sfc'"
+#ocal FV3ATM_OUTPUT_DIR="'${DATAoutput}/FV3_OUTPUT'"  # TODO: correct and enable after UFSWM PR 2554 is merged
 # OUTPUT_GRID
 local OUTPUT_FILE="'${OUTPUT_FILETYPE_ATM}' '${OUTPUT_FILETYPE_SFC}'"
 local ZSTANDARD_LEVEL=0

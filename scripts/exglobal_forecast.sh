@@ -3,30 +3,22 @@
 ################################################################################
 ## UNIX Script Documentation Block
 ## Script name:         exglobal_forecast.sh
-## Script description:  Runs a global FV3GFS model forecast
+## Script description:  Runs a global UFS-weather-model forecast
 ##
 ## Author:   Fanglin Yang       Organization: NCEP/EMC       Date: 2016-11-15
-## Abstract: This script runs a single GFS forecast with FV3 dynamical core.
-##           This script is created based on a C-shell script that GFDL wrote
-##           for the NGGPS Phase-II Dycore Comparison Project.
+## Abstract: This script runs a single GFS forecast with UFS-weather-model
 ##
-## Script history log:
+## Script history log: (See git log for detailed history)
 ## 2016-11-15  Fanglin Yang   First Version.
-## 2017-02-09  Rahul Mahajan  Added warm start and restructured the code.
-## 2017-03-10  Fanglin Yang   Updated for running forecast on Cray.
-## 2017-03-24  Fanglin Yang   Updated to use NEMS FV3GFS with IPD4
-## 2017-05-24  Rahul Mahajan  Updated for cycling with NEMS FV3GFS
-## 2017-09-13  Fanglin Yang   Updated for using GFDL MP and Write Component
-## 2019-04-02
 ##
 ## Attributes:
-##   Language: Portable Operating System Interface (POSIX) Shell
-##   Machines: All supported platforms
+##   Language: Bourne Again SHell
+##   Machines: This script is platform independent
 ##
 ## Usage (Arguments)
 ##	No command line argument
 ##
-## Data input (location, name)
+## Data input (location, name)  TODO: Need to complete this for each component
 ## 	Warm start files:
 ## 		1. restart file except sfc_data, $gmemdir/RESTART/$PDY.$cyc.*.nc
 ##		2. sfcanl_data, $memdir/RESTART/$PDY.$cyc.*.nc
@@ -37,7 +29,7 @@
 ##		1. initial condition, $memdir/INPUT/*.nc
 ##	Restart files:
 ##
-##	Fix files:
+##	Fix files: TODO: Need to complete this for each component
 ##		1. computing grid, ${FIXgfs}/orog/$CASE/${CASE}_grid.tile${n}.nc
 ##		2. orography data, ${FIXgfs}/orog/$CASE/${CASE}.mx${OCNRES}_oro_data.tile${n}.nc
 ##		3. mosaic data, ${FIXgfs}/orog/$CASE/${CASE}_mosaic.nc
@@ -52,30 +44,16 @@
 ##			${FIXgfs}/am/global_climaeropac_global.txt
 ## 		12. Monthly volcanic forcing ${FIXgfs}/am/global_volcanic_aerosols_YYYY-YYYY.txt
 ##
-## Data output (location, name)
+## Data output (location, name) TODO: Need to complete this for each component
 ##	If quilting=true and output grid is gaussian grid:
 ##	   1. atmf data, $memdir/${CDUMP}.t${cyc}z.atmf${FH3}.$OUTPUT_FILE
 ##	   2. sfcf data, $memdir/${CDUMP}.t${cyc}z.sfcf${FH3}.$OUTPUT_FILE
 ##	   3. logf data, $memdir/${CDUMP}.t${cyc}z.logf${FH3}.$OUTPUT_FILE
-##	If quilting=false and output grid is not gaussian grid:
-##           1. NGGPS2D, $memdir/nggps2d.tile${n}.nc
-##	   2. NGGPS3D, $memdir/nggps3d.tile${n}.nc
-##	   3. grid spec, $memdir/grid_spec.tile${n}.nc
-##	   4. atmospheric static tiles, $memdir/atmos_static.tile${n}.nc
-##	   5. atmospheric 4x daily tiles, $memdir/atmos_4xdaily.tile${n}.nc
 ##
 ## Status output
 ##	0: Normal
 ##	others: Error
-##
-## Namelist input, in RUNDIR,
-##	1. diag_table
-##	2. ufs.configure
-##	3. model_configure
-##	4. input.nml
-#######################
-# Main body starts here
-#######################
+################################################################################
 
 source "${USHgfs}/preamble.sh"
 
@@ -115,6 +93,7 @@ echo "MAIN: Variables before determination of run type loaded"
 
 echo "MAIN: Determining run type"
 UFS_det
+echo "RERUN = ${RERUN}, warm_start = ${warm_start}"
 echo "MAIN: run type determined"
 
 echo "MAIN: Post-determination set up of run type"
@@ -156,12 +135,13 @@ export err=${ERR}
 ${ERRSCRIPT} || exit "${err}"
 
 FV3_out
-[[ ${cplflx} = .true. ]] && MOM6_out
-[[ ${cplflx} = .true. ]] && CMEPS_out
-[[ ${cplwav} = .true. ]] && WW3_out
-[[ ${cplice} = .true. ]] && CICE_out
-[[ ${cplchm} = .true. ]] && GOCART_out
-[[ ${esmf_profile:-} = .true. ]] && CPL_out
+[[ "${cplflx}" == ".true." ]] && MOM6_out
+[[ "${cplflx}" == ".true." ]] && CMEPS_out
+[[ "${cplwav}" == ".true." ]] && WW3_out
+[[ "${cplice}" == ".true." ]] && CICE_out
+[[ "${cplchm}" == ".true." ]] && GOCART_out
+[[ "${cplchm}" == ".true." ]] && GOCART_out
+[[ "${esmf_profile:-}" == ".true." ]] && CPL_out
 echo "MAIN: Output copied to ROTDIR"
 
 #------------------------------------------------------------------
