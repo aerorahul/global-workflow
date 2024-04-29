@@ -72,9 +72,10 @@ cplwav=${cplwav:-.false.} # ? how to control 1-way/2-way?
 cplchm=${cplchm:-.false.} # Chemistry model
 cplice=${cplice:-.false.} # ICE model
 
+# TODO: remove these from here and set appropriately in configs/parsing scripts
 OCNTIM=${OCNTIM:-1800}
 DELTIM=${DELTIM:-450}
-ICETIM=${DELTIM}
+ICETIM=${DELTIM}  # TODO:  Why is ice timestep set to atmospheric timestep
 
 CPL_SLOW=${CPL_SLOW:-${OCNTIM}}
 CPL_FAST=${CPL_FAST:-${ICETIM}}
@@ -84,11 +85,11 @@ common_predet
 
 echo "MAIN: Loading variables before determination of run type"
 FV3_predet
-[[ ${cplflx} = .true. ]] && CMEPS_predet
-[[ ${cplflx} = .true. ]] && MOM6_predet
-[[ ${cplwav} = .true. ]] && WW3_predet
-[[ ${cplice} = .true. ]] && CICE_predet
-[[ ${cplchm} = .true. ]] && GOCART_predet
+[[ "${cplflx}" == ".true." ]] && CMEPS_predet
+[[ "${cplflx}" == ".true." ]] && MOM6_predet
+[[ "${cplwav}" == ".true." ]] && WW3_predet
+[[ "${cplice}" == ".true." ]] && CICE_predet
+[[ "${cplchm}" == ".true." ]] && GOCART_predet
 echo "MAIN: Variables before determination of run type loaded"
 
 echo "MAIN: Determining run type"
@@ -98,19 +99,19 @@ echo "MAIN: run type determined"
 
 echo "MAIN: Post-determination set up of run type"
 FV3_postdet
-[[ ${cplflx} = .true. ]] && CMEPS_postdet
-[[ ${cplflx} = .true. ]] && MOM6_postdet
-[[ ${cplwav} = .true. ]] && WW3_postdet
-[[ ${cplice} = .true. ]] && CICE_postdet
-[[ ${cplchm} = .true. ]] && GOCART_postdet
+[[ "${cplflx}" == ".true." ]] && CMEPS_postdet
+[[ "${cplflx}" == ".true." ]] && MOM6_postdet
+[[ "${cplwav}" == ".true." ]] && WW3_postdet
+[[ "${cplice}" == ".true." ]] && CICE_postdet
+[[ "${cplchm}" == ".true." ]] && GOCART_postdet
 echo "MAIN: Post-determination set up of run type finished"
 
 echo "MAIN: Writing namelists and model configuration"
 FV3_nml
-[[ ${cplflx} = .true. ]] && MOM6_nml
-[[ ${cplwav} = .true. ]] && WW3_nml
-[[ ${cplice} = .true. ]] && CICE_nml
-[[ ${cplchm} = .true. ]] && GOCART_rc
+[[ "${cplflx}" == ".true." ]] && MOM6_nml
+[[ "${cplwav}" == ".true." ]] && WW3_nml
+[[ "${cplice}" == ".true." ]] && CICE_nml
+[[ "${cplchm}" == ".true." ]] && GOCART_rc
 UFS_configure
 echo "MAIN: Name lists and model configuration written"
 
@@ -139,7 +140,6 @@ FV3_out
 [[ "${cplflx}" == ".true." ]] && CMEPS_out
 [[ "${cplwav}" == ".true." ]] && WW3_out
 [[ "${cplice}" == ".true." ]] && CICE_out
-[[ "${cplchm}" == ".true." ]] && GOCART_out
 [[ "${cplchm}" == ".true." ]] && GOCART_out
 [[ "${esmf_profile:-}" == ".true." ]] && CPL_out
 echo "MAIN: Output copied to ROTDIR"

@@ -35,7 +35,7 @@ local med_model="cmeps"
 local med_petlist_bounds="0 $(( MEDPETS-1 ))"
 local med_omp_num_threads="${MEDTHREADS}"
 
-if [[ "${cpl}" = ".true." ]]; then
+if [[ "${cpl}" == ".true." ]]; then
   local coupling_interval_slow_sec="${CPL_SLOW}"
 fi
 
