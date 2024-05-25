@@ -9,36 +9,19 @@ FV3_postdet() {
   # cold start case
   if [[ "${warm_start}" == ".false." ]]; then
 
-    # Create an array of chgres-ed FV3 files
-    local fv3_input_files tile_files fv3_input_file
-    fv3_input_files=(gfs_ctrl.nc)
-    tile_files=(gfs_data sfc_data)
-    local nn tt
-    for (( nn = 1; nn <= ntiles; nn++ )); do
-      for tt in "${tile_files[@]}"; do
-        fv3_input_files+=("${tt}.tile${nn}.nc")
-      done
-    done
+    local file_list file_array
+    file_list=$(FV3_coldstarts)
+    IFS=',' read -ra file_array <<< "${file_list}"
 
     echo "Copying FV3 cold start files for 'RUN=${RUN}' at '${current_cycle}' from '${COM_ATMOS_INPUT}'"
-    for fv3_input_file in "${fv3_input_files[@]}"; do
-      ${NCP} "${COM_ATMOS_INPUT}/${fv3_input_file}" "${DATA}/INPUT/${fv3_input_file}" \
+    local fv3_file
+    for fv3_file in "${file_array[@]}"; do
+      ${NCP} "${COM_ATMOS_INPUT}/${fv3_file}" "${DATA}/INPUT/${fv3_file}" \
       || ( echo "FATAL ERROR: Unable to copy FV3 IC, ABORT!"; exit 1 )
     done
 
   # warm start case
   elif [[ "${warm_start}" == ".true." ]]; then
-
-    # Create an array of FV3 restart files
-    local fv3_restart_files tile_files fv3_restart_file restart_file
-    fv3_restart_files=(coupler.res fv_core.res.nc)
-    tile_files=(fv_core.res fv_srf_wnd.res fv_tracer.res phy_data sfc_data ca_data)
-    local nn tt
-    for (( nn = 1; nn <= ntiles; nn++ )); do
-      for tt in "${tile_files[@]}"; do
-        fv3_restart_files+=("${tt}.tile${nn}.nc")
-      done
-    done
 
     # Determine restart date and directory containing restarts
     local restart_date restart_dir
@@ -50,10 +33,15 @@ FV3_postdet() {
       restart_dir="${COM_ATMOS_RESTART_PREV}"
     fi
 
+    local file_list file_array
+    file_list=$(FV3_restarts)
+    IFS=',' read -ra file_array <<< "${file_list}"
+
     echo "Copying FV3 restarts for 'RUN=${RUN}' at '${restart_date}' from '${restart_dir}'"
-    for fv3_restart_file in "${fv3_restart_files[@]}"; do
-      restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${fv3_restart_file}"
-      ${NCP} "${restart_dir}/${restart_file}" "${DATA}/INPUT/${fv3_restart_file}" \
+    local fv3_file
+    for fv3_file in "${file_array[@]}"; do
+      restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${fv3_file}"
+      ${NCP} "${restart_dir}/${restart_file}" "${DATA}/INPUT/${fv3_file}" \
       || ( echo "FATAL ERROR: Unable to copy FV3 IC, ABORT!"; exit 1 )
     done
 

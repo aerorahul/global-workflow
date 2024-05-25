@@ -60,9 +60,9 @@ common_predet(){
     model_start_date_current_cycle="${current_cycle_begin}"
     model_start_date_next_cycle="${next_cycle_begin}"
   else
-    model_start_date_current_cycle=${current_cycle} 
+    model_start_date_current_cycle=${current_cycle}
     model_start_date_next_cycle=${next_cycle}
-  fi 
+  fi
   forecast_end_cycle=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${FHMAX} hours" +%Y%m%d%H)
 
   FHMIN=${FHMIN:-0}
@@ -80,6 +80,40 @@ common_predet(){
 
   echo "Exiting ${FUNCNAME[0]}"
   toc "${FUNCNAME[0]}"
+}
+
+FV3_coldstarts(){
+  # Function to return an comma-separated string of cold-start input files for FV3
+  # Create an array of chgres-ed FV3 files
+  local fv3_input_array tile_files
+  fv3_input_array=(gfs_ctrl.nc)
+  tile_files=(gfs_data sfc_data)
+  local nn tt
+  for (( nn = 1; nn <= ntiles; nn++ )); do
+    for tt in "${tile_files[@]}"; do
+      fv3_input_array+=("${tt}.tile${nn}.nc")
+    done
+  done
+  # Create a comma separated string from array
+  IFS=,
+  echo "${fv3_input_array[*]}"
+}
+
+FV3_restarts(){
+  # Function to return an comma-separated string of warm-start input files for FV3
+  # Create an array of FV3 restart files
+  local fv3_restart_array tile_files
+  fv3_restart_array=(coupler.res fv_core.res.nc)
+  tile_files=(fv_core.res fv_srf_wnd.res fv_tracer.res phy_data sfc_data ca_data)
+  local nn tt
+  for (( nn = 1; nn <= ntiles; nn++ )); do
+    for tt in "${tile_files[@]}"; do
+      fv3_restart_array+=("${tt}.tile${nn}.nc")
+    done
+  done
+  # Create a comma separated string from array
+  IFS=,
+  echo "${fv3_restart_array[*]}"
 }
 
 # shellcheck disable=SC2034
@@ -389,11 +423,11 @@ FV3_predet(){
     ${NCP} "${FIXgfs}/ugwd/${CASE}/${CASE}_oro_data_ss.tile${tt}.nc"          "${DATA}/INPUT/oro_data_ss.tile${tt}.nc"
   done
   if [[ "${DO_NEST:-NO}" == "YES" ]] ; then
-    ${NLN} "${DATA}/INPUT/oro_data.tile7.nc" "${DATA}/INPUT/oro_data.nest02.tile7.nc"
-    ${NLN} "${DATA}/INPUT/${CASE}_grid.tile7.nc"     "${DATA}/INPUT/${CASE}_grid.nest02.tile7.nc"
-    ${NLN} "${DATA}/INPUT/${CASE}_grid.tile7.nc"     "${DATA}/INPUT/grid.nest02.tile7.nc"
-    ${NLN} "${DATA}/INPUT/oro_data_ls.tile7.nc" "${DATA}/INPUT/oro_data_ls.nest02.tile7.nc"
-    ${NLN} "${DATA}/INPUT/oro_data_ss.tile7.nc" "${DATA}/INPUT/oro_data_ss.nest02.tile7.nc"
+    ${NCP} "${DATA}/INPUT/oro_data.tile7.nc"     "${DATA}/INPUT/oro_data.nest02.tile7.nc"
+    ${NCP} "${DATA}/INPUT/${CASE}_grid.tile7.nc" "${DATA}/INPUT/${CASE}_grid.nest02.tile7.nc"
+    ${NCP} "${DATA}/INPUT/${CASE}_grid.tile7.nc" "${DATA}/INPUT/grid.nest02.tile7.nc"
+    ${NCP} "${DATA}/INPUT/oro_data_ls.tile7.nc"  "${DATA}/INPUT/oro_data_ls.nest02.tile7.nc"
+    ${NCP} "${DATA}/INPUT/oro_data_ss.tile7.nc"  "${DATA}/INPUT/oro_data_ss.nest02.tile7.nc"
   fi
 
   # NoahMP table
