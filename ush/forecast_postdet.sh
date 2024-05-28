@@ -184,15 +184,9 @@ FV3_out() {
   fi
 
   # Create an array of fv3 restart files
-  local fv3_restart_files tile_files fv3_restart_file restart_file
-  fv3_restart_files=(coupler.res fv_core.res.nc)
-  tile_files=(fv_core.res fv_srf_wnd.res fv_tracer.res phy_data sfc_data ca_data)
-  local nn tt
-  for (( nn = 1; nn <= ntiles; nn++ )); do
-    for tt in "${tile_files[@]}"; do
-      fv3_restart_files+=("${tt}.tile${nn}.nc")
-    done
-  done
+  local file_list fv3_restart_files fv3_restart_file restart_file
+  file_list=$(FV3_restarts)
+  IFS=',' read -ra fv3_restart_files <<< "${file_list}"
 
   # Copy restarts in the assimilation window for RUN=gdas|enkfgdas|enkfgfs
   if [[ "${RUN}" =~ "gdas" || "${RUN}" == "enkfgfs" ]]; then
