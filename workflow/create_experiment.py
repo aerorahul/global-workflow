@@ -11,6 +11,14 @@ where ${HOMEgfs} is determined from the location of this script.
 The yaml file are simply the arguments for these two scripts.
 After this scripts runs the experiment is ready for launch.
 
+Environmental variables
+-----------------------
+    pslot
+        Name of the experiment
+
+    RUNTESTS
+        Root directory where the test EXPDIR and COMROOT will be placed
+
 Output
 ------
 Functionally an experiment is setup as a result running the two scripts described above
@@ -18,7 +26,6 @@ with an error code of 0 upon success.
 """
 
 import os
-import sys
 
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
@@ -27,8 +34,6 @@ from wxflow import AttrDict, parse_j2yaml, Logger, logit
 
 import setup_expt
 import setup_xml
-
-from hosts import Host
 
 _here = os.path.dirname(__file__)
 _top = os.path.abspath(os.path.join(os.path.abspath(_here), '..'))
@@ -78,12 +83,6 @@ if __name__ == '__main__':
     data = AttrDict(HOMEgfs=_top)
     data.update(os.environ)
     testconf = parse_j2yaml(path=user_inputs.yaml, data=data)
-
-    if 'skip_ci_on_hosts' in testconf:
-        host = Host()
-        if host.machine.lower() in [machine.lower() for machine in testconf.skip_ci_on_hosts]:
-            logger.info(f'Skipping creation of case: {testconf.arguments.pslot} on {host.machine.capitalize()}')
-            sys.exit(0)
 
     # Create a list of arguments to setup_expt.py
     setup_expt_args = [testconf.experiment.system, testconf.experiment.mode]

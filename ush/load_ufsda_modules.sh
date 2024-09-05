@@ -34,13 +34,13 @@ source "${HOMEgfs}/ush/module-setup.sh"
 module use "${HOMEgfs}/sorc/gdas.cd/modulefiles"
 
 case "${MACHINE_ID}" in
-  ("hera" | "orion" | "hercules")
+  ("hera" | "orion" | "hercules" | "wcoss2")
     module load "${MODS}/${MACHINE_ID}"
     ncdump=$( command -v ncdump )
     NETCDF=$( echo "${ncdump}" | cut -d " " -f 3 )
     export NETCDF
     ;;
-  ("wcoss2" | "acorn" | "jet" | "gaea" | "s4")
+  ("jet" | "gaea" | "s4" | "acorn")
     echo WARNING: UFSDA NOT SUPPORTED ON THIS PLATFORM
     ;;  
   *)
@@ -50,6 +50,11 @@ esac
 
 module list
 pip list
+
+# Add wxflow to PYTHONPATH
+wxflowPATH="${HOMEgfs}/ush/python"
+PYTHONPATH="${PYTHONPATH:+${PYTHONPATH}:}${HOMEgfs}/ush:${wxflowPATH}"
+export PYTHONPATH
 
 # Restore stack soft limit:
 ulimit -S -s "${ulimit_s}"

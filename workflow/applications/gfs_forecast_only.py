@@ -25,7 +25,8 @@ class GFSForecastOnlyAppConfig(AppConfig):
             configs += ['atmos_products']
 
             if self.do_aero:
-                configs += ['aerosol_init']
+                if not self._base['EXP_WARM_START']:
+                    configs += ['aerosol_init']
 
             if self.do_tracker:
                 configs += ['tracker']
@@ -69,11 +70,11 @@ class GFSForecastOnlyAppConfig(AppConfig):
         return configs
 
     @staticmethod
-    def _update_base(base_in):
+    def update_base(base_in):
 
         base_out = base_in.copy()
         base_out['INTERVAL_GFS'] = AppConfig.get_gfs_interval(base_in['gfs_cyc'])
-        base_out['CDUMP'] = 'gfs'
+        base_out['RUN'] = 'gfs'
 
         return base_out
 
@@ -87,7 +88,10 @@ class GFSForecastOnlyAppConfig(AppConfig):
         tasks = ['stage_ic']
 
         if self.do_aero:
-            tasks += ['aerosol_init']
+            aero_fcst_run = self._base.get('AERO_FCST_RUN', 'BOTH').lower()
+            if self._base['RUN'] in aero_fcst_run or aero_fcst_run == "both":
+                if not self._base['EXP_WARM_START']:
+                    tasks += ['aerosol_init']
 
         if self.do_wave:
             tasks += ['waveinit']
@@ -124,7 +128,7 @@ class GFSForecastOnlyAppConfig(AppConfig):
                 tasks += ['gempak', 'gempakmeta', 'gempakncdcupapgif', 'gempakpgrb2spec']
 
             if self.do_awips:
-                tasks += ['awips_20km_1p0deg', 'awips_g2', 'fbwind']
+                tasks += ['awips_20km_1p0deg', 'fbwind']
 
         if self.do_ocean:
             tasks += ['ocean_prod']
@@ -149,4 +153,4 @@ class GFSForecastOnlyAppConfig(AppConfig):
 
         tasks += ['arch', 'cleanup']  # arch and cleanup **must** be the last tasks
 
-        return {f"{self._base['CDUMP']}": tasks}
+        return {f"{self._base['RUN']}": tasks}

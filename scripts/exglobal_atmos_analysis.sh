@@ -26,7 +26,7 @@ pwd=$(pwd)
 
 # Base variables
 CDATE=${CDATE:-"2001010100"}
-CDUMP=${CDUMP:-"gdas"}
+rCDUMP=${rCDUMP:-"gdas"}
 GDUMP=${GDUMP:-"gdas"}
 
 # Derived base variables
@@ -430,7 +430,18 @@ ${NLN} ${CRTM_FIX}/NPOESS.VISsnow.EmisCoeff.bin  ./crtm_coeffs/NPOESS.VISsnow.Em
 ${NLN} ${CRTM_FIX}/NPOESS.VISwater.EmisCoeff.bin ./crtm_coeffs/NPOESS.VISwater.EmisCoeff.bin
 ${NLN} ${CRTM_FIX}/FASTEM6.MWwater.EmisCoeff.bin ./crtm_coeffs/FASTEM6.MWwater.EmisCoeff.bin
 ${NLN} ${CRTM_FIX}/AerosolCoeff.bin              ./crtm_coeffs/AerosolCoeff.bin
-${NLN} ${CRTM_FIX}/CloudCoeff.GFDLFV3.-109z-1.bin ./crtm_coeffs/CloudCoeff.bin
+if (( imp_physics == 8 )); then
+   echo "using CRTM Thompson cloud optical table"
+   ${NLN} "${CRTM_FIX}/CloudCoeff.Thompson08.-109z-1.bin" ./crtm_coeffs/CloudCoeff.bin
+elif (( imp_physics == 11 )); then
+   echo "using CRTM GFDL cloud optical table"
+   ${NLN} "${CRTM_FIX}/CloudCoeff.GFDLFV3.-109z-1.bin" ./crtm_coeffs/CloudCoeff.bin
+else
+   echo "INVALID imp_physics = ${imp_physics}"
+   echo "FATAL ERROR: No valid CRTM cloud optical table found for imp_physics =  ${imp_physics}"
+   exit 1
+fi
+
 
 ##############################################################
 # Observational data
@@ -570,8 +581,8 @@ if [ ${GENDIAG} = "YES" ] ; then
       if [ -d ${DIAG_DIR} ]; then
          rm -rf ${DIAG_DIR}
       fi
-      npe_m1="$((${npe_gsi}-1))"
-      for pe in $(seq 0 ${npe_m1}); do
+      ntasks_m1="$((ntasks-1))"
+      for pe in $(seq 0 ${ntasks_m1}); do
         pedir="dir."$(printf %04i ${pe})
         mkdir -p ${DIAG_DIR}/${pedir}
         ${NLN} ${DIAG_DIR}/${pedir} ${pedir}
@@ -664,7 +675,7 @@ EOFunzip
       chmod 755 ${DATA}/mp_unzip.sh
       ncmd=$(cat ${DATA}/mp_unzip.sh | wc -l)
       if [ ${ncmd} -gt 0 ]; then
-         ncmd_max=$((ncmd < npe_node_max ? ncmd : npe_node_max))
+         ncmd_max=$((ncmd < max_tasks_per_node ? ncmd : max_tasks_per_node))
          APRUNCFP_UNZIP=$(eval echo ${APRUNCFP})
          ${APRUNCFP_UNZIP} ${DATA}/mp_unzip.sh
          export err=$?; err_chk
@@ -885,7 +896,9 @@ OBS_INPUT::
   l_hyb_ens=${l_hyb_ens},
   generate_ens=.false.,
   beta_s0=0.125,readin_beta=.false.,
-  s_ens_h=800.,s_ens_v=-0.8,readin_localization=.true.,
+  s_ens_h=1000.0,300.0,150.0,685.0,219.2,s_ens_v=-0.5,-0.5,-0.5,0.0,0.0,
+  readin_localization=.false.,global_spectral_filter_sd=.false.,
+  r_ensloccov4scl=1,nsclgrp=3,naensloc=5,
   aniso_a_en=.false.,oz_univ_static=.false.,uv_hyb_ens=.true.,
   ensemble_path='./ensemble_data/',
   ens_fast_read=.true.,
@@ -977,7 +990,7 @@ cd ${pwd}
 if [ ${SENDECF} = "YES" -a "${RUN}" != "enkf" ]; then
    ecflow_client --event release_fcst
 fi
-echo "${CDUMP} ${CDATE} atminc done at $(date)" > ${COM_ATMOS_ANALYSIS}/${APREFIX}loginc.txt
+echo "${rCDUMP} ${CDATE} atminc done at $(date)" > ${COM_ATMOS_ANALYSIS}/${APREFIX}loginc.txt
 
 ################################################################################
 

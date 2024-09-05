@@ -36,16 +36,49 @@ nhour(){
   echo "${hours}"
 }
 
+FV3_coldstarts(){
+  # Function to return an comma-separated string of cold-start input files for FV3
+  # Create an array of chgres-ed FV3 files
+  local fv3_input_files tile_files
+  fv3_input_files=(gfs_ctrl.nc)
+  tile_files=(gfs_data sfc_data)
+  local nn tt
+  for (( nn = 1; nn <= ntiles; nn++ )); do
+    for tt in "${tile_files[@]}"; do
+      fv3_input_files+=("${tt}.tile${nn}.nc")
+    done
+  done
+  # Create a comma separated string from array using IFS
+  IFS=, echo "${fv3_input_files[*]}"
+}
+
+FV3_restarts(){
+  # Function to return an comma-separated string of warm-start input files for FV3
+  # Create an array of FV3 restart files
+  local fv3_restart_files tile_files
+  fv3_restart_files=(coupler.res fv_core.res.nc)
+  tile_files=(fv_core.res fv_srf_wnd.res fv_tracer.res phy_data sfc_data ca_data)
+  local nn tt
+  for (( nn = 1; nn <= ntiles; nn++ )); do
+    for tt in "${tile_files[@]}"; do
+      fv3_restart_files+=("${tt}.tile${nn}.nc")
+    done
+  done
+  # Create a comma separated string from array using IFS
+  IFS=, echo "${fv3_restart_files[*]}"
+}
+
 # shellcheck disable=SC2034
 common_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  CDUMP=${CDUMP:-gdas}
-  rCDUMP=${rCDUMP:-${CDUMP}}
+  RUN=${RUN:-gdas}
+  rCDUMP=${rCDUMP:-${RUN}}
 
   CDATE=${CDATE:-"${PDY}${cyc}"}
   ENSMEM=${ENSMEM:-000}
+  MEMBER=$(( 10#${ENSMEM:-"-1"} )) # -1: control, 0: ensemble mean, >0: ensemble member $MEMBER
 
   # Define significant cycles
   half_window=$(( assim_freq / 2 ))
@@ -55,8 +88,20 @@ common_predet(){
   current_cycle_begin=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} - ${half_window} hours" +%Y%m%d%H)
   current_cycle_end=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${half_window} hours" +%Y%m%d%H)
   next_cycle_begin=$(date --utc -d "${next_cycle:0:8} ${next_cycle:8:2} - ${half_window} hours" +%Y%m%d%H)
-  next_cycle_end=$(date --utc -d "${next_cycle:0:8} ${next_cycle:8:2} + ${half_window} hours" +%Y%m%d%H)
   forecast_end_cycle=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${FHMAX} hours" +%Y%m%d%H)
+
+  # Define model start date for current_cycle and next_cycle as the time the forecast will start
+  if [[ "${DOIAU:-NO}" == "YES" ]]; then
+    model_start_date_current_cycle="${current_cycle_begin}"
+    model_start_date_next_cycle="${next_cycle_begin}"
+  else
+    if [[ "${REPLAY_ICS:-NO}" == "YES" ]]; then
+      model_start_date_current_cycle=${current_cycle_end}
+    else
+      model_start_date_current_cycle=${current_cycle}
+    fi
+    model_start_date_next_cycle=${next_cycle}
+  fi
 
   FHMIN=${FHMIN:-0}
   FHMAX=${FHMAX:-9}
@@ -64,7 +109,7 @@ common_predet(){
   FHMAX_HF=${FHMAX_HF:-0}
   FHOUT_HF=${FHOUT_HF:-1}
 
-  if [[ ! -d "${COM_CONF}" ]]; then mkdir -p "${COM_CONF}"; fi
+  if [[ ! -d "${COMOUT_CONF}" ]]; then mkdir -p "${COMOUT_CONF}"; fi
 
   cd "${DATA}" || ( echo "FATAL ERROR: Unable to 'cd ${DATA}', ABORT!"; exit 8 )
 
@@ -80,9 +125,9 @@ FV3_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  if [[ ! -d "${COM_ATMOS_HISTORY}" ]]; then mkdir -p "${COM_ATMOS_HISTORY}"; fi
-  if [[ ! -d "${COM_ATMOS_MASTER}" ]]; then mkdir -p "${COM_ATMOS_MASTER}"; fi
-  if [[ ! -d "${COM_ATMOS_RESTART}" ]]; then mkdir -p "${COM_ATMOS_RESTART}"; fi
+  if [[ ! -d "${COMOUT_ATMOS_HISTORY}" ]]; then mkdir -p "${COMOUT_ATMOS_HISTORY}"; fi
+  if [[ ! -d "${COMOUT_ATMOS_MASTER}" ]]; then mkdir -p "${COMOUT_ATMOS_MASTER}"; fi
+  if [[ ! -d "${COMOUT_ATMOS_RESTART}" ]]; then mkdir -p "${COMOUT_ATMOS_RESTART}"; fi
   if [[ ! -d "${DATArestart}/FV3_RESTART" ]]; then mkdir -p "${DATArestart}/FV3_RESTART"; fi
   if [[ ! -d "${DATAoutput}/FV3_OUTPUT" ]]; then mkdir -p "${DATAoutput}/FV3_OUTPUT"; fi
 
@@ -108,6 +153,7 @@ FV3_predet(){
   fi
 
   # Convert output settings into an explicit list for FV3
+  # Create an FV3 fhr list to be used in the filenames
   FV3_OUTPUT_FH=""
   local fhr=${FHMIN}
   if (( FHOUT_HF > 0 && FHMAX_HF > 0 )); then
@@ -116,16 +162,41 @@ FV3_predet(){
   fi
   FV3_OUTPUT_FH="${FV3_OUTPUT_FH} $(seq -s ' ' "${fhr}" "${FHOUT}" "${FHMAX}")"
 
+  # Create an FV3 fhr list to be used in the namelist
+  # The FV3 fhr list for the namelist and the FV3 fhr list for the filenames
+  # are only different when REPLAY_ICS is set to YES
+  if [[ "${REPLAY_ICS:-NO}" == "YES"  ]]; then
+    local FV3_OUTPUT_FH_s
+    FV3_OUTPUT_FH_NML="$(echo "scale=5; ${OFFSET_START_HOUR}+(${DELTIM}/3600)" | bc -l)"
+    FV3_OUTPUT_FH_s=$(( OFFSET_START_HOUR * 3600 + DELTIM ))
+    local fhr=${FHOUT}
+    if (( FHOUT_HF > 0 && FHMAX_HF > 0 )); then
+      FV3_OUTPUT_FH_NML="${FV3_OUTPUT_FH_NML} $(seq -s ' ' "$(( OFFSET_START_HOUR + FHOUT_HF ))" "${FHOUT_HF}" "${FHMAX_HF}")"
+      FV3_OUTPUT_FH_s="${FV3_OUTPUT_FH_s} $(seq -s ' ' "$(( OFFSET_START_HOUR * 3600 + FHOUT_HF * 3600 ))" "$(( FHOUT_HF * 3600 ))" "$(( FHMAX_HF * 3600 ))")"
+      fhr=${FHMAX_HF}
+    fi
+    FV3_OUTPUT_FH_NML="${FV3_OUTPUT_FH_NML} $(seq -s ' ' "${fhr}" "${FHOUT}" "${FHMAX}")"
+    FV3_OUTPUT_FH_s="${FV3_OUTPUT_FH_s} $(seq -s ' ' "$(( fhr * 3600 ))" "$(( FHOUT * 3600 ))" "$(( FHMAX * 3600 ))")"
+    local hh mm ss s_total
+    FV3_OUTPUT_FH_hhmmss=""
+    for s_total in ${FV3_OUTPUT_FH_s}; do
+      # Convert seconds to HHH:MM:SS
+      (( ss = s_total, mm = ss / 60, ss %= 60, hh = mm / 60, mm %= 60 )) || true
+      FV3_OUTPUT_FH_hhmmss="${FV3_OUTPUT_FH_hhmmss} $(printf "%03d-%02d-%02d" "${hh}" "${mm}" "${ss}")"
+    done
+    # Create a string from an array
+  else # If non-replay ICs are being used
+    # The FV3 fhr list for the namelist and the FV3 fhr list for the filenames
+    # are identical when REPLAY_ICS is set to NO
+    FV3_OUTPUT_FH_NML="${FV3_OUTPUT_FH}"
+  fi
+
   # Other options
-  MEMBER=$(( 10#${ENSMEM:-"-1"} )) # -1: control, 0: ensemble mean, >0: ensemble member $MEMBER
   PREFIX_ATMINC=${PREFIX_ATMINC:-""} # allow ensemble to use recentered increment
 
   # IAU options
   IAUFHRS=${IAUFHRS:-0}
   IAU_DELTHRS=${IAU_DELTHRS:-0}
-
-  # Model config options
-  ntiles=6
 
   #------------------------------------------------------------------
   # changeable parameters
@@ -240,6 +311,7 @@ FV3_predet(){
     phys_hydrostatic=".false."     # enable heating in hydrostatic balance in non-hydrostatic simulation
     use_hydro_pressure=".false."   # use hydrostatic pressure for physics
     make_nh=".true."               # running in non-hydrostatic mode
+    pass_full_omega_to_physics_in_non_hydrostatic_mode=".true."
   else  # hydrostatic options
     hydrostatic=".true."
     phys_hydrostatic=".false."     # ignored when hydrostatic = T
@@ -249,9 +321,16 @@ FV3_predet(){
 
   # Conserve total energy as heat globally
   consv_te=${consv_te:-1.} # range 0.-1., 1. will restore energy to orig. val. before physics
+  if [[ "${DO_NEST:-NO}" == "YES" ]] ; then
+    consv_te=0
+    k_split=${k_split:-1}
+    k_split_nest=${k_split_nest:-4}
+  else
+    consv_te=${consv_te:-1.} # range 0.-1., 1. will restore energy to orig. val. before physics
+    k_split=${k_split:-2}
+  fi
 
   # time step parameters in FV3
-  k_split=${k_split:-2}
   n_split=${n_split:-5}
 
   if [[ "${MONO:0:4}" == "mono" ]]; then  # monotonic options
@@ -342,18 +421,18 @@ FV3_predet(){
   FNSNOC=${FNSNOC:-"${FIXgfs}/am/global_snoclim.1.875.grb"}
   FNZORC=${FNZORC:-"igbp"}
   FNAISC=${FNAISC:-"${FIXgfs}/am/IMS-NIC.blended.ice.monthly.clim.grb"}
-  FNALBC2=${FNALBC2:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.facsf.tileX.nc"}
-  FNTG3C=${FNTG3C:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.substrate_temperature.tileX.nc"}
-  FNVEGC=${FNVEGC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
+  FNALBC2=${FNALBC2:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.facsf.tileX.nc"}
+  FNTG3C=${FNTG3C:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.substrate_temperature.tileX.nc"}
+  FNVEGC=${FNVEGC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
   FNMSKH=${FNMSKH:-"${FIXgfs}/am/global_slmask.t1534.3072.1536.grb"}
-  FNVMNC=${FNVMNC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
-  FNVMXC=${FNVMXC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
-  FNSLPC=${FNSLPC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.slope_type.tileX.nc"}
-  FNALBC=${FNALBC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.snowfree_albedo.tileX.nc"}
-  FNVETC=${FNVETC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_type.tileX.nc"}
-  FNSOTC=${FNSOTC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.soil_type.tileX.nc"}
-  FNSOCC=${FNSOCC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.soil_color.tileX.nc"}
-  FNABSC=${FNABSC:-"${FIXgfs}/orog/${CASE}/sfc/${CASE}.mx${OCNRES}.maximum_snow_albedo.tileX.nc"}
+  FNVMNC=${FNVMNC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
+  FNVMXC=${FNVMXC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_greenness.tileX.nc"}
+  FNSLPC=${FNSLPC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.slope_type.tileX.nc"}
+  FNALBC=${FNALBC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.snowfree_albedo.tileX.nc"}
+  FNVETC=${FNVETC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.vegetation_type.tileX.nc"}
+  FNSOTC=${FNSOTC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.soil_type.tileX.nc"}
+  FNSOCC=${FNSOCC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.soil_color.tileX.nc"}
+  FNABSC=${FNABSC:-"${FIXorog}/${CASE}/sfc/${CASE}.mx${OCNRES}.maximum_snow_albedo.tileX.nc"}
   FNSMCC=${FNSMCC:-"${FIXgfs}/am/global_soilmgldas.statsgo.t${JCAP}.${LONB}.${LATB}.grb"}
 
   # If the appropriate resolution fix file is not present, use the highest resolution available (T1534)
@@ -361,22 +440,29 @@ FV3_predet(){
 
   # Grid and orography data
   if [[ "${cplflx}" == ".false." ]] ; then
-    ${NCP} "${FIXgfs}/orog/${CASE}/${CASE}_mosaic.nc" "${DATA}/INPUT/grid_spec.nc"
+    ${NCP} "${FIXorog}/${CASE}/${CASE}_mosaic.nc" "${DATA}/INPUT/grid_spec.nc"
   else
-    ${NCP} "${FIXgfs}/orog/${CASE}/${CASE}_mosaic.nc" "${DATA}/INPUT/${CASE}_mosaic.nc"
+    ${NCP} "${FIXorog}/${CASE}/${CASE}_mosaic.nc" "${DATA}/INPUT/${CASE}_mosaic.nc"
   fi
 
   # Files for GWD
-  ${NCP} "${FIXgfs}/ugwd/ugwp_limb_tau.nc" "${DATA}/ugwp_limb_tau.nc"
+  ${NCP} "${FIXugwd}/ugwp_limb_tau.nc" "${DATA}/ugwp_limb_tau.nc"
 
   # Files for orography, GWD tiles
   local tt
   for (( tt = 1; tt <= ntiles; tt++ )); do
-    ${NCP} "${FIXgfs}/orog/${CASE}/${CASE}.mx${OCNRES}_oro_data.tile${tt}.nc" "${DATA}/INPUT/oro_data.tile${tt}.nc"
-    ${NCP} "${FIXgfs}/orog/${CASE}/${CASE}_grid.tile${tt}.nc"                 "${DATA}/INPUT/${CASE}_grid.tile${tt}.nc"
-    ${NCP} "${FIXgfs}/ugwd/${CASE}/${CASE}_oro_data_ls.tile${tt}.nc"          "${DATA}/INPUT/oro_data_ls.tile${tt}.nc"
-    ${NCP} "${FIXgfs}/ugwd/${CASE}/${CASE}_oro_data_ss.tile${tt}.nc"          "${DATA}/INPUT/oro_data_ss.tile${tt}.nc"
+    ${NCP} "${FIXorog}/${CASE}/${CASE}.mx${OCNRES}_oro_data.tile${tt}.nc" "${DATA}/INPUT/oro_data.tile${tt}.nc"
+    ${NCP} "${FIXorog}/${CASE}/${CASE}_grid.tile${tt}.nc"                 "${DATA}/INPUT/${CASE}_grid.tile${tt}.nc"
+    ${NCP} "${FIXugwd}/${CASE}/${CASE}_oro_data_ls.tile${tt}.nc"          "${DATA}/INPUT/oro_data_ls.tile${tt}.nc"
+    ${NCP} "${FIXugwd}/${CASE}/${CASE}_oro_data_ss.tile${tt}.nc"          "${DATA}/INPUT/oro_data_ss.tile${tt}.nc"
   done
+  if [[ "${DO_NEST:-NO}" == "YES" ]] ; then
+    ${NLN} "${DATA}/INPUT/oro_data.tile7.nc" "${DATA}/INPUT/oro_data.nest02.tile7.nc"
+    ${NLN} "${DATA}/INPUT/${CASE}_grid.tile7.nc"     "${DATA}/INPUT/${CASE}_grid.nest02.tile7.nc"
+    ${NLN} "${DATA}/INPUT/${CASE}_grid.tile7.nc"     "${DATA}/INPUT/grid.nest02.tile7.nc"
+    ${NLN} "${DATA}/INPUT/oro_data_ls.tile7.nc" "${DATA}/INPUT/oro_data_ls.nest02.tile7.nc"
+    ${NLN} "${DATA}/INPUT/oro_data_ss.tile7.nc" "${DATA}/INPUT/oro_data_ss.nest02.tile7.nc"
+  fi
 
   # NoahMP table
   local noahmptablefile="${PARMgfs}/ufs/noahmptable.tbl"
@@ -474,8 +560,9 @@ WW3_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  if [[ ! -d "${COM_WAVE_HISTORY}" ]]; then mkdir -p "${COM_WAVE_HISTORY}"; fi
-  if [[ ! -d "${COM_WAVE_RESTART}" ]]; then mkdir -p "${COM_WAVE_RESTART}" ; fi
+  if [[ ! -d "${COMOUT_WAVE_HISTORY}" ]]; then mkdir -p "${COMOUT_WAVE_HISTORY}"; fi
+  if [[ ! -d "${COMOUT_WAVE_RESTART}" ]]; then mkdir -p "${COMOUT_WAVE_RESTART}" ; fi
+
   if [[ ! -d "${DATArestart}/WAVE_RESTART" ]]; then mkdir -p "${DATArestart}/WAVE_RESTART"; fi
   if [[ ! -d "${DATAoutput}/WAVE_OUTPUT" ]]; then mkdir -p "${DATAoutput}/WAVE_OUTPUT"; fi
 
@@ -493,17 +580,17 @@ WW3_predet(){
     grdALL=$(printf "%s\n" "${array[@]}" | sort -u | tr '\n' ' ')
 
     for ww3_grid in ${grdALL}; do
-      ${NCP} "${COM_WAVE_PREP}/${RUN}wave.mod_def.${ww3_grid}" "${DATA}/mod_def.${ww3_grid}" \
-      || ( echo "FATAL ERROR: Failed to copy '${RUN}wave.mod_def.${ww3_grid}' from '${COM_WAVE_PREP}'"; exit 1 )
+      ${NCP} "${COMIN_WAVE_PREP}/${RUN}wave.mod_def.${ww3_grid}" "${DATA}/mod_def.${ww3_grid}" \
+      || ( echo "FATAL ERROR: Failed to copy '${RUN}wave.mod_def.${ww3_grid}' from '${COMIN_WAVE_PREP}'"; exit 1 )
     done
   else
     #if shel, only 1 waveGRD which is linked to mod_def.ww3
-    ${NCP} "${COM_WAVE_PREP}/${RUN}wave.mod_def.${waveGRD}" "${DATA}/mod_def.ww3" \
-    || ( echo "FATAL ERROR: Failed to copy '${RUN}wave.mod_def.${waveGRD}' from '${COM_WAVE_PREP}'"; exit 1 )
+    ${NCP} "${COMIN_WAVE_PREP}/${RUN}wave.mod_def.${waveGRD}" "${DATA}/mod_def.ww3" \
+    || ( echo "FATAL ERROR: Failed to copy '${RUN}wave.mod_def.${waveGRD}' from '${COMIN_WAVE_PREP}'"; exit 1 )
   fi
 
   if [[ "${WW3ICEINP}" == "YES" ]]; then
-    local wavicefile="${COM_WAVE_PREP}/${RUN}wave.${WAVEICE_FID}.t${current_cycle:8:2}z.ice"
+    local wavicefile="${COMIN_WAVE_PREP}/${RUN}wave.${WAVEICE_FID}.t${current_cycle:8:2}z.ice"
     if [[ ! -f "${wavicefile}" ]]; then
       echo "FATAL ERROR: WW3ICEINP='${WW3ICEINP}', but missing ice file '${wavicefile}', ABORT!"
       exit 1
@@ -513,7 +600,7 @@ WW3_predet(){
   fi
 
   if [[ "${WW3CURINP}" == "YES" ]]; then
-    local wavcurfile="${COM_WAVE_PREP}/${RUN}wave.${WAVECUR_FID}.t${current_cycle:8:2}z.cur"
+    local wavcurfile="${COMIN_WAVE_PREP}/${RUN}wave.${WAVECUR_FID}.t${current_cycle:8:2}z.cur"
     if [[ ! -f "${wavcurfile}" ]]; then
       echo "FATAL ERROR: WW3CURINP='${WW3CURINP}', but missing current file '${wavcurfile}', ABORT!"
       exit 1
@@ -556,18 +643,28 @@ CICE_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  if [[ ! -d "${COM_ICE_HISTORY}" ]]; then mkdir -p "${COM_ICE_HISTORY}"; fi
-  if [[ ! -d "${COM_ICE_RESTART}" ]]; then mkdir -p "${COM_ICE_RESTART}"; fi
-  if [[ ! -d "${COM_ICE_INPUT}" ]]; then mkdir -p "${COM_ICE_INPUT}"; fi
+  if [[ ! -d "${COMOUT_ICE_HISTORY}" ]]; then mkdir -p "${COMOUT_ICE_HISTORY}"; fi
+  if [[ ! -d "${COMOUT_ICE_RESTART}" ]]; then mkdir -p "${COMOUT_ICE_RESTART}"; fi
+  if [[ ! -d "${COMIN_ICE_INPUT}" ]]; then mkdir -p "${COMIN_ICE_INPUT}"; fi
+
+  if [[ ! -d "${DATA}/CICE_OUTPUT" ]]; then mkdir -p "${DATA}/CICE_OUTPUT"; fi
   if [[ ! -d "${DATArestart}/CICE_RESTART" ]]; then mkdir -p "${DATArestart}/CICE_RESTART"; fi
-  if [[ ! -d "${DATAoutput}/CICE_OUTPUT" ]]; then  mkdir -p "${DATAoutput}/CICE_OUTPUT"; fi
+  if [[ ! -d "${DATAoutput}/CICE_OUTPUT" ]]; then mkdir -p "${DATAoutput}/CICE_OUTPUT"; fi
 
   ${NLN} "${DATArestart}/CICE_RESTART" "${DATA}/CICE_RESTART"
   ${NLN} "${DATAoutput}/CICE_OUTPUT"   "${DATA}/CICE_OUTPUT"
 
   # CICE does not have a concept of high frequency output like FV3
   # Convert output settings into an explicit list for CICE
-  CICE_OUTPUT_FH=$(seq -s ' ' "${FHMIN}" "${FHOUT_OCNICE}" "${FHMAX}")
+  if (( $(( ( cyc + FHMIN ) % FHOUT_ICE )) == 0 )); then
+    # shellcheck disable=SC2312
+    mapfile -t CICE_OUTPUT_FH < <(seq "${FHMIN}" "${FHOUT_ICE}" "${FHMAX}") || exit 10
+  else
+    CICE_OUTPUT_FH=("${FHMIN}")
+    # shellcheck disable=SC2312
+    mapfile -t -O "${#CICE_OUTPUT_FH[@]}" CICE_OUTPUT_FH < <(seq "$(( FHMIN + $(( ( cyc + FHMIN ) % FHOUT_ICE )) ))" "${FHOUT_ICE}" "${FHMAX}") || exit 10
+    CICE_OUTPUT_FH+=("${FHMAX}")
+  fi
 
   # Fix files
   ${NCP} "${FIXgfs}/cice/${ICERES}/${CICE_GRID}" "${DATA}/"
@@ -583,9 +680,11 @@ MOM6_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  if [[ ! -d "${COM_OCEAN_HISTORY}" ]]; then mkdir -p "${COM_OCEAN_HISTORY}"; fi
-  if [[ ! -d "${COM_OCEAN_RESTART}" ]]; then mkdir -p "${COM_OCEAN_RESTART}"; fi
-  if [[ ! -d "${COM_OCEAN_INPUT}" ]]; then mkdir -p "${COM_OCEAN_INPUT}"; fi
+  if [[ ! -d "${COMOUT_OCEAN_HISTORY}" ]]; then mkdir -p "${COMOUT_OCEAN_HISTORY}"; fi
+  if [[ ! -d "${COMOUT_OCEAN_RESTART}" ]]; then mkdir -p "${COMOUT_OCEAN_RESTART}"; fi
+  if [[ ! -d "${COMIN_OCEAN_INPUT}" ]]; then mkdir -p "${COMIN_OCEAN_INPUT}"; fi
+
+  if [[ ! -d "${DATA}/MOM6_OUTPUT" ]]; then mkdir -p "${DATA}/MOM6_OUTPUT"; fi
   if [[ ! -d "${DATArestart}/MOM6_RESTART" ]]; then mkdir -p "${DATArestart}/MOM6_RESTART"; fi
   if [[ ! -d "${DATAoutput}/MOM6_OUTPUT" ]]; then mkdir -p "${DATAoutput}/MOM6_OUTPUT"; fi
 
@@ -594,7 +693,7 @@ MOM6_predet(){
 
   # MOM6 does not have a concept of high frequency output like FV3
   # Convert output settings into an explicit list for MOM6
-  MOM6_OUTPUT_FH=$(seq -s ' ' "${FHMIN}" "${FHOUT_OCNICE}" "${FHMAX}")
+  MOM6_OUTPUT_FH=$(seq -s ' ' "${FHMIN}" "${FHOUT_OCN}" "${FHMAX}")
 
   # If using stochastic parameterizations, create a seed that does not exceed the
   # largest signed integer
@@ -632,7 +731,8 @@ CMEPS_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  if [[ ! -d "${COM_MED_RESTART}" ]]; then mkdir -p "${COM_MED_RESTART}"; fi
+  if [[ ! -d "${COMOUT_MED_RESTART}" ]]; then mkdir -p "${COMOUT_MED_RESTART}"; fi
+
   if [[ ! -d "${DATArestart}/CMEPS_RESTART" ]]; then mkdir -p "${DATArestart}/CMEPS_RESTART"; fi
 
   ${NLN} "${DATArestart}/CMEPS_RESTART" "${DATA}/CMEPS_RESTART"
@@ -646,7 +746,7 @@ GOCART_predet(){
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  if [[ ! -d "${COM_CHEM_HISTORY}" ]]; then mkdir -p "${COM_CHEM_HISTORY}"; fi
+  if [[ ! -d "${COMOUT_CHEM_HISTORY}" ]]; then mkdir -p "${COMOUT_CHEM_HISTORY}"; fi
   if [[ ! -d "${DATAoutput}/GOCART_OUTPUT" ]]; then mkdir -p "${DATAoutput}/GOCART_OUTPUT"; fi
 
   ${NLN} "${DATAoutput}/GOCART_OUTPUT" "${DATA}/GOCART_OUTPUT"

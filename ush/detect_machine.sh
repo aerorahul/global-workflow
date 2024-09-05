@@ -21,10 +21,8 @@ case $(hostname -f) in
   dlogin0[1-9].dogwood.wcoss2.ncep.noaa.gov) MACHINE_ID=wcoss2 ;; ### dogwood01-9
   dlogin10.dogwood.wcoss2.ncep.noaa.gov)     MACHINE_ID=wcoss2 ;; ### dogwood10
 
-  gaea9)               MACHINE_ID=gaea ;; ### gaea9
-  gaea1[0-6])          MACHINE_ID=gaea ;; ### gaea10-16
-  gaea9.ncrc.gov)      MACHINE_ID=gaea ;; ### gaea9
-  gaea1[0-6].ncrc.gov) MACHINE_ID=gaea ;; ### gaea10-16
+  gaea5[1-8])          MACHINE_ID=gaea ;; ### gaea51-58
+  gaea5[1-8].ncrc.gov) MACHINE_ID=gaea ;; ### gaea51-58
 
   hfe0[1-9]) MACHINE_ID=hera ;; ### hera01-09
   hfe1[0-2]) MACHINE_ID=hera ;; ### hera10-12
@@ -47,7 +45,7 @@ case $(hostname -f) in
   *) MACHINE_ID=UNKNOWN ;;  # Unknown platform
 esac
 
-if [[ ${MACHINE_ID} == "UNKNOWN" ]]; then 
+if [[ ${MACHINE_ID} == "UNKNOWN" ]]; then
    case ${PW_CSP:-} in
       "aws" | "google" | "azure") MACHINE_ID=noaacloud ;;
       *) PW_CSP="UNKNOWN"
@@ -77,8 +75,8 @@ elif [[ -d /scratch1 ]]; then
   MACHINE_ID=hera
 elif [[ -d /work ]]; then
   # We are on MSU Orion or Hercules
-  if [[ -d /apps/other ]]; then
-    # We are on Hercules
+  mount=$(findmnt -n -o SOURCE /home)
+  if [[ ${mount} =~ "hercules" ]]; then
     MACHINE_ID=hercules
   else
     MACHINE_ID=orion

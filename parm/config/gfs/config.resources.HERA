@@ -1,0 +1,48 @@
+#! /usr/bin/env bash
+
+# Hera-specific job resources
+
+case ${step} in
+  "anal")
+    if [[ "${CASE}" == "C384" ]]; then
+      export ntasks=270
+      export threads_per_task_anal=8
+      export tasks_per_node=$(( max_tasks_per_node / threads_per_task ))
+    fi
+    ;;
+
+  "atmanlvar")
+    export tasks_per_node_gdas=12
+    export tasks_per_node_gfs=12
+    ;;
+
+  "atmensanlobs")
+    export tasks_per_node=12
+    ;;
+
+  "atmensanlsol")
+    export tasks_per_node=12
+    ;;
+
+  "eupd")
+    case ${CASE} in
+      "C384")
+        export ntasks=80
+        ;;
+      "C192" | "C96" | "C48")
+        export threads_per_task=4
+        ;;
+      *)
+        ;;
+    esac
+    export tasks_per_node=$(( max_tasks_per_node / threads_per_task ))
+    ;;
+
+  "ecen")
+    if [[ "${CASE}" == "C768" ]]; then export threads_per_task=6; fi
+    export tasks_per_node=$(( max_tasks_per_node / threads_per_task ))
+    ;;
+
+  *)
+    ;;
+esac

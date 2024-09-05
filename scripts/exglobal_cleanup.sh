@@ -3,27 +3,35 @@
 source "${USHgfs}/preamble.sh"
 
 ###############################################################
-# Clean up previous cycles; various depths
-# PRIOR CYCLE: Leave the prior cycle alone
-# shellcheck disable=SC2153
-GDATE=$(date --utc +%Y%m%d%H -d "${PDY} ${cyc} -${assim_freq} hours")
-# PREVIOUS to the PRIOR CYCLE
-GDATE=$(date --utc +%Y%m%d%H -d "${GDATE:0:8} ${GDATE:8:2} -${assim_freq} hours")
+echo "Begin Cleanup ${DATAROOT}!"
 
-# Remove the TMPDIR directory
-# TODO Only prepbufr is currently using this directory, and all jobs should be
-#   cleaning up after themselves anyway
-COMIN="${DATAROOT}/${GDATE}"
-[[ -d ${COMIN} ]] && rm -rf "${COMIN}"
+# Remove DATAoutput from the forecast model run
+# TODO: Handle this better
+DATAfcst="${DATAROOT}/${RUN}fcst.${PDY:-}${cyc}"
+if [[ -d "${DATAfcst}" ]]; then rm -rf "${DATAfcst}"; fi
+#DATAefcs="${DATAROOT}/${RUN}efcs???${PDY:-}${cyc}"
+rm -rf "${DATAROOT}/${RUN}efcs"*"${PDY:-}${cyc}"
+
+# In XML, DATAROOT is defined as:
+#DATAROOT="${STMP}/RUNDIRS/${PSLOT}/${RUN}.${PDY}${cyc}"
+# cleanup is only executed after the entire cycle is successfully completed.
+# removing DATAROOT should be possible if that is the case.
+rm -rf "${DATAROOT}"
+
+echo "Cleanup ${DATAROOT} completed!"
+###############################################################
 
 if [[ "${CLEANUP_COM:-YES}" == NO ]] ; then
     exit 0
 fi
 
+###############################################################
+# Clean up previous cycles; various depths
+
 # Step back every assim_freq hours and remove old rotating directories
 # for successful cycles (defaults from 24h to 120h).
 # Retain files needed by Fit2Obs
-last_date=$(date --utc +%Y%m%d%H -d "${PDY} ${cyc} -${RMOLDEND:-24} hours" )
+last_date=$(date --utc +%Y%m%d%H -d "${PDY} ${cyc} -${RMOLDEND:-24} hours")
 first_date=$(date --utc +%Y%m%d%H -d "${PDY} ${cyc} -${RMOLDSTD:-120} hours")
 last_rtofs=$(date --utc +%Y%m%d%H -d "${PDY} ${cyc} -${RMOLDRTOFS:-48} hours")
 function remove_files() {
@@ -59,10 +67,11 @@ for (( current_date=first_date; current_date <= last_date; \
         # TODO: This needs to be revamped to not look at the rocoto log.
         # shellcheck disable=SC2312
         if [[ $(tail -n 1 "${rocotolog}") =~ "This cycle is complete: Success" ]]; then
-            YMD="${current_PDY}" HH="${current_cyc}" declare_from_tmpl COM_TOP
-            if [[ -d "${COM_TOP}" ]]; then
+            YMD="${current_PDY}" HH="${current_cyc}" declare_from_tmpl \
+                COMOUT_TOP:COM_TOP_TMPL
+            if [[ -d "${COMOUT_TOP}" ]]; then
                 IFS=", " read -r -a exclude_list <<< "${exclude_string:-}"
-                remove_files "${COM_TOP}" "${exclude_list[@]:-}"
+                remove_files "${COMOUT_TOP}" "${exclude_list[@]:-}"
             fi
             if [[ -d "${rtofs_dir}" ]] && (( current_date < last_rtofs )); then rm -rf "${rtofs_dir}" ; fi
         fi

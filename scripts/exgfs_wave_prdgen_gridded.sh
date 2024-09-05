@@ -8,6 +8,11 @@
 # Remarks :                                                                   #
 # - Supplemental error output is witten to the wave.log file.                 #
 #                                                                             #
+# COM inputs:                                                                 #
+#  - ${COMIN_WAVE_GRID}/${RUNwave}.${cycle}.${grdID}.f${fhr}.grib2            #
+#                                                                             #
+# COM outputs:                                                                #
+#  - ${COMOUT_WAVE_WMO}/grib2.${cycle}.f${fhr}.awipsww3_${grdOut}             #
 #                                                                             #
 # Origination  : 05/02/2007                                                   #
 # Last update  : 10/08/2020                                                   # 
@@ -96,31 +101,14 @@ grids=${grids:-ak_10m at_10m ep_10m wc_10m glo_30m}
      #
 
      GRIBIN="${COM_WAVE_GRID}/${RUNwave}.${cycle}.${grdID}.f${fhr}.grib2"
-     GRIBIN_chk=$GRIBIN.idx
-
-     icnt=1
-     while [ $icnt -lt 1000 ]; do
-       if [ -r $GRIBIN_chk ] ; then
-         break
-       else
-         echo "Waiting for input file: $GRIBIN"
-         let "icnt=icnt+1"
-         sleep 5
-       fi
-       if [ $icnt -ge $maxtries ]; then
-         msg="ABNORMAL EXIT: NO GRIB FILE FOR GRID $GRIBIN"
-         echo ' '
-         echo '**************************** '
-         echo '*** ERROR : NO GRIB FILE *** '
-         echo '**************************** '
-         echo ' '
-         echo $msg
-         set_trace
-         echo "$RUNwave $grdID ${fhr} prdgen $date $cycle : GRIB file missing." >> $wavelog
-         err=1;export err;${errchk} || exit ${err}
-       fi
-     done
-
+     GRIBIN_chk="${GRIBIN}.idx"
+     sleep_interval=5
+     max_tries=1000
+     if ! wait_for_file "${GRIBIN_chk}" "${sleep_interval}" "${max_tries}"; then
+       echo "FATAL ERROR: ${GRIBIN_chk} not found after waiting $((sleep_interval * ( max_tries - 1))) secs"
+       echo "$RUNwave $grdID ${fhr} prdgen $date $cycle : GRIB file missing." >> $wavelog
+       err=1;export err;${errchk} || exit ${err}
+     fi
      GRIBOUT=$RUNwave.$cycle.$grdID.f${fhr}.clipped.grib2
 
      iparam=1
@@ -232,16 +220,16 @@ grids=${grids:-ak_10m at_10m ep_10m wc_10m glo_30m}
      #set_trace
      #set +x
      echo "      Saving $AWIPSGRB.$grdOut.f${fhr} as grib2.$cycle.awipsww3_${grdID}.f${fhr}"
-     echo "          in ${COM_WAVE_WMO}"
+     echo "          in ${COMOUT_WAVE_WMO}"
      #set_trace
-     cp "${AWIPSGRB}.${grdID}.f${fhr}" "${COM_WAVE_WMO}/grib2.${cycle}.f${fhr}.awipsww3_${grdOut}"
+     cp "${AWIPSGRB}.${grdID}.f${fhr}" "${COMOUT_WAVE_WMO}/grib2.${cycle}.f${fhr}.awipsww3_${grdOut}"
      #set +x
 
 
      if [ "$SENDDBN" = 'YES' ]
      then
        echo "      Sending $AWIPSGRB.$grdID.f${fhr} to DBRUN."
-       "${DBNROOT}/bin/dbn_alert" GRIB_LOW "${RUN}" "${job}" "${COM_WAVE_WMO}/grib2.${cycle}.f${fhr}.awipsww3_${grdOut}"
+       "${DBNROOT}/bin/dbn_alert" GRIB_LOW "${RUN}" "${job}" "${COMOUT_WAVE_WMO}/grib2.${cycle}.f${fhr}.awipsww3_${grdOut}"
      fi
      rm -f $AWIPSGRB.$grdID.f${fhr} tocgrib2.out
    done # For grids

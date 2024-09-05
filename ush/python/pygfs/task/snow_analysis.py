@@ -32,27 +32,27 @@ class SnowAnalysis(Analysis):
     def __init__(self, config):
         super().__init__(config)
 
-        _res = int(self.config['CASE'][1:])
-        _window_begin = add_to_datetime(self.runtime_config.current_cycle, -to_timedelta(f"{self.config['assim_freq']}H") / 2)
-        _letkfoi_yaml = os.path.join(self.runtime_config.DATA, f"{self.runtime_config.RUN}.t{self.runtime_config['cyc']:02d}z.letkfoi.yaml")
+        _res = int(self.task_config['CASE'][1:])
+        _window_begin = add_to_datetime(self.task_config.current_cycle, -to_timedelta(f"{self.task_config['assim_freq']}H") / 2)
+        _letkfoi_yaml = os.path.join(self.task_config.DATA, f"{self.task_config.RUN}.t{self.task_config['cyc']:02d}z.letkfoi.yaml")
 
         # Create a local dictionary that is repeatedly used across this class
         local_dict = AttrDict(
             {
                 'npx_ges': _res + 1,
                 'npy_ges': _res + 1,
-                'npz_ges': self.config.LEVS - 1,
-                'npz': self.config.LEVS - 1,
+                'npz_ges': self.task_config.LEVS - 1,
+                'npz': self.task_config.LEVS - 1,
                 'SNOW_WINDOW_BEGIN': _window_begin,
-                'SNOW_WINDOW_LENGTH': f"PT{self.config['assim_freq']}H",
-                'OPREFIX': f"{self.runtime_config.RUN}.t{self.runtime_config.cyc:02d}z.",
-                'APREFIX': f"{self.runtime_config.RUN}.t{self.runtime_config.cyc:02d}z.",
+                'SNOW_WINDOW_LENGTH': f"PT{self.task_config['assim_freq']}H",
+                'OPREFIX': f"{self.task_config.RUN}.t{self.task_config.cyc:02d}z.",
+                'APREFIX': f"{self.task_config.RUN}.t{self.task_config.cyc:02d}z.",
                 'jedi_yaml': _letkfoi_yaml
             }
         )
 
-        # task_config is everything that this task should need
-        self.task_config = AttrDict(**self.config, **self.runtime_config, **local_dict)
+        # Extend task_config with local_dict
+        self.task_config = AttrDict(**self.task_config, **local_dict)
 
     @logit(logger)
     def prepare_GTS(self) -> None:
@@ -114,7 +114,7 @@ class SnowAnalysis(Analysis):
         # 1. generate bufr2ioda YAML files
         # 2. execute bufr2ioda.x
         for name in prep_gts_config.bufr2ioda.keys():
-            gts_yaml = os.path.join(self.runtime_config.DATA, f"bufr_{name}_snow.yaml")
+            gts_yaml = os.path.join(self.task_config.DATA, f"bufr_{name}_snow.yaml")
             logger.info(f"Generate BUFR2IODA YAML file: {gts_yaml}")
             temp_yaml = parse_j2yaml(prep_gts_config.bufr2ioda[name], localconf)
             save_as_yaml(temp_yaml, gts_yaml)
@@ -299,7 +299,7 @@ class SnowAnalysis(Analysis):
         keys = ['HOMEgfs', 'DATA', 'current_cycle',
                 'COM_ATMOS_RESTART_PREV', 'COM_SNOW_ANALYSIS', 'APREFIX',
                 'SNOWDEPTHVAR', 'BESTDDEV', 'CASE', 'OCNRES', 'ntiles',
-                'APRUN_SNOWANL', 'JEDIEXE', 'jedi_yaml',
+                'APRUN_SNOWANL', 'JEDIEXE', 'jedi_yaml', 'DOIAU', 'SNOW_WINDOW_BEGIN',
                 'APPLY_INCR_NML_TMPL', 'APPLY_INCR_EXE', 'APRUN_APPLY_INCR']
         for key in keys:
             localconf[key] = self.task_config[key]
@@ -310,10 +310,20 @@ class SnowAnalysis(Analysis):
                              AttrDict({key: localconf[key] for key in ['DATA', 'ntiles', 'current_cycle']}))
 
         logger.info("Running JEDI LETKF")
-        self.execute_jediexe(localconf.DATA,
-                             localconf.APRUN_SNOWANL,
-                             os.path.basename(localconf.JEDIEXE),
-                             localconf.jedi_yaml)
+        exec_cmd = Executable(localconf.APRUN_SNOWANL)
+        exec_name = os.path.join(localconf.DATA, 'gdas.x')
+        exec_cmd.add_default_arg(exec_name)
+        exec_cmd.add_default_arg('fv3jedi')
+        exec_cmd.add_default_arg('localensembleda')
+        exec_cmd.add_default_arg(localconf.jedi_yaml)
+
+        try:
+            logger.debug(f"Executing {exec_cmd}")
+            exec_cmd()
+        except OSError:
+            raise OSError(f"Failed to execute {exec_cmd}")
+        except Exception:
+            raise WorkflowException(f"An error occured during execution of {exec_cmd}")
 
         logger.info("Creating analysis from backgrounds and increments")
         self.add_increments(localconf)
@@ -347,13 +357,19 @@ class SnowAnalysis(Analysis):
         FileHandler(yaml_copy).sync()
 
         logger.info("Copy analysis to COM")
-        template = f'{to_fv3time(self.task_config.current_cycle)}.sfc_data.tile{{tilenum}}.nc'
+        bkgtimes = []
+        if self.task_config.DOIAU:
+            # need both beginning and middle of window
+            bkgtimes.append(self.task_config.SNOW_WINDOW_BEGIN)
+        bkgtimes.append(self.task_config.current_cycle)
         anllist = []
-        for itile in range(1, self.task_config.ntiles + 1):
-            filename = template.format(tilenum=itile)
-            src = os.path.join(self.task_config.DATA, 'anl', filename)
-            dest = os.path.join(self.task_config.COM_SNOW_ANALYSIS, filename)
-            anllist.append([src, dest])
+        for bkgtime in bkgtimes:
+            template = f'{to_fv3time(bkgtime)}.sfc_data.tile{{tilenum}}.nc'
+            for itile in range(1, self.task_config.ntiles + 1):
+                filename = template.format(tilenum=itile)
+                src = os.path.join(self.task_config.DATA, 'anl', filename)
+                dest = os.path.join(self.task_config.COM_SNOW_ANALYSIS, filename)
+                anllist.append([src, dest])
         FileHandler({'copy': anllist}).sync()
 
         logger.info('Copy increments to COM')
@@ -532,6 +548,8 @@ class SnowAnalysis(Analysis):
              APPLY_INCR_NML_TMPL
              APPLY_INCR_EXE
              APRUN_APPLY_INCR
+             DOIAU
+             SNOW_WINDOW_BEGIN
 
         Raises
         ------
@@ -543,38 +561,67 @@ class SnowAnalysis(Analysis):
 
         # need backgrounds to create analysis from increments after LETKF
         logger.info("Copy backgrounds into anl/ directory for creating analysis from increments")
-        template = f'{to_fv3time(config.current_cycle)}.sfc_data.tile{{tilenum}}.nc'
+        bkgtimes = []
+        if config.DOIAU:
+            # want analysis at beginning and middle of window
+            bkgtimes.append(config.SNOW_WINDOW_BEGIN)
+        bkgtimes.append(config.current_cycle)
         anllist = []
-        for itile in range(1, config.ntiles + 1):
-            filename = template.format(tilenum=itile)
-            src = os.path.join(config.COM_ATMOS_RESTART_PREV, filename)
-            dest = os.path.join(config.DATA, "anl", filename)
-            anllist.append([src, dest])
+        for bkgtime in bkgtimes:
+            template = f'{to_fv3time(bkgtime)}.sfc_data.tile{{tilenum}}.nc'
+            for itile in range(1, config.ntiles + 1):
+                filename = template.format(tilenum=itile)
+                src = os.path.join(config.COM_ATMOS_RESTART_PREV, filename)
+                dest = os.path.join(config.DATA, "anl", filename)
+                anllist.append([src, dest])
         FileHandler({'copy': anllist}).sync()
 
-        logger.info("Create namelist for APPLY_INCR_EXE")
-        nml_template = config.APPLY_INCR_NML_TMPL
-        nml_data = Jinja(nml_template, config).render
-        logger.debug(f"apply_incr_nml:\n{nml_data}")
+        if config.DOIAU:
+            logger.info("Copying increments to beginning of window")
+            template_in = f'snowinc.{to_fv3time(config.current_cycle)}.sfc_data.tile{{tilenum}}.nc'
+            template_out = f'snowinc.{to_fv3time(config.SNOW_WINDOW_BEGIN)}.sfc_data.tile{{tilenum}}.nc'
+            inclist = []
+            for itile in range(1, config.ntiles + 1):
+                filename_in = template_in.format(tilenum=itile)
+                filename_out = template_out.format(tilenum=itile)
+                src = os.path.join(config.DATA, 'anl', filename_in)
+                dest = os.path.join(config.DATA, 'anl', filename_out)
+                inclist.append([src, dest])
+            FileHandler({'copy': inclist}).sync()
 
-        nml_file = os.path.join(config.DATA, "apply_incr_nml")
-        with open(nml_file, "w") as fho:
-            fho.write(nml_data)
+        # loop over times to apply increments
+        for bkgtime in bkgtimes:
+            logger.info("Processing analysis valid: {bkgtime}")
+            logger.info("Create namelist for APPLY_INCR_EXE")
+            nml_template = config.APPLY_INCR_NML_TMPL
+            nml_config = {
+                'current_cycle': bkgtime,
+                'CASE': config.CASE,
+                'DATA': config.DATA,
+                'HOMEgfs': config.HOMEgfs,
+                'OCNRES': config.OCNRES,
+            }
+            nml_data = Jinja(nml_template, nml_config).render
+            logger.debug(f"apply_incr_nml:\n{nml_data}")
 
-        logger.info("Link APPLY_INCR_EXE into DATA/")
-        exe_src = config.APPLY_INCR_EXE
-        exe_dest = os.path.join(config.DATA, os.path.basename(exe_src))
-        if os.path.exists(exe_dest):
-            rm_p(exe_dest)
-        os.symlink(exe_src, exe_dest)
+            nml_file = os.path.join(config.DATA, "apply_incr_nml")
+            with open(nml_file, "w") as fho:
+                fho.write(nml_data)
 
-        # execute APPLY_INCR_EXE to create analysis files
-        exe = Executable(config.APRUN_APPLY_INCR)
-        exe.add_default_arg(os.path.join(config.DATA, os.path.basename(exe_src)))
-        logger.info(f"Executing {exe}")
-        try:
-            exe()
-        except OSError:
-            raise OSError(f"Failed to execute {exe}")
-        except Exception:
-            raise WorkflowException(f"An error occured during execution of {exe}")
+            logger.info("Link APPLY_INCR_EXE into DATA/")
+            exe_src = config.APPLY_INCR_EXE
+            exe_dest = os.path.join(config.DATA, os.path.basename(exe_src))
+            if os.path.exists(exe_dest):
+                rm_p(exe_dest)
+            os.symlink(exe_src, exe_dest)
+
+            # execute APPLY_INCR_EXE to create analysis files
+            exe = Executable(config.APRUN_APPLY_INCR)
+            exe.add_default_arg(os.path.join(config.DATA, os.path.basename(exe_src)))
+            logger.info(f"Executing {exe}")
+            try:
+                exe()
+            except OSError:
+                raise OSError(f"Failed to execute {exe}")
+            except Exception:
+                raise WorkflowException(f"An error occured during execution of {exe}")

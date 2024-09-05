@@ -6,39 +6,23 @@ FV3_postdet() {
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
+  #============================================================================
+  # First copy initial conditions
   # cold start case
   if [[ "${warm_start}" == ".false." ]]; then
 
-    # Create an array of chgres-ed FV3 files
-    local fv3_input_files tile_files fv3_input_file
-    fv3_input_files=(gfs_ctrl.nc)
-    tile_files=(gfs_data sfc_data)
-    local nn tt
-    for (( nn = 1; nn <= ntiles; nn++ )); do
-      for tt in "${tile_files[@]}"; do
-        fv3_input_files+=("${tt}.tile${nn}.nc")
-      done
-    done
-
-    echo "Copying FV3 cold start files for 'RUN=${RUN}' at '${current_cycle}' from '${COM_ATMOS_INPUT}'"
-    for fv3_input_file in "${fv3_input_files[@]}"; do
-      ${NCP} "${COM_ATMOS_INPUT}/${fv3_input_file}" "${DATA}/INPUT/${fv3_input_file}" \
+    # Get list of FV3 cold start files
+    local file_list
+    file_list=$(FV3_coldstarts)
+    echo "Copying FV3 cold start files for 'RUN=${RUN}' at '${current_cycle}' from '${COMIN_ATMOS_INPUT}'"
+    local fv3_file
+    for fv3_file in ${file_list}; do
+      ${NCP} "${COMIN_ATMOS_INPUT}/${fv3_file}" "${DATA}/INPUT/${fv3_file}" \
       || ( echo "FATAL ERROR: Unable to copy FV3 IC, ABORT!"; exit 1 )
     done
 
   # warm start case
   elif [[ "${warm_start}" == ".true." ]]; then
-
-    # Create an array of FV3 restart files
-    local fv3_restart_files tile_files fv3_restart_file restart_file
-    fv3_restart_files=(coupler.res fv_core.res.nc)
-    tile_files=(fv_core.res fv_srf_wnd.res fv_tracer.res phy_data sfc_data ca_data)
-    local nn tt
-    for (( nn = 1; nn <= ntiles; nn++ )); do
-      for tt in "${tile_files[@]}"; do
-        fv3_restart_files+=("${tt}.tile${nn}.nc")
-      done
-    done
 
     # Determine restart date and directory containing restarts
     local restart_date restart_dir
@@ -46,21 +30,85 @@ FV3_postdet() {
       restart_date="${RERUN_DATE}"
       restart_dir="${DATArestart}/FV3_RESTART"
     else  # "${RERUN}" == "NO"
-      if [[ "${DOIAU}" == "YES" ]]; then
-        restart_date="${current_cycle_begin}"
-      else
-        restart_date="${current_cycle}"
-      fi
-      restart_dir="${COM_ATMOS_RESTART_PREV}"
+      restart_date="${model_start_date_current_cycle}"
+      restart_dir="${COMIN_ATMOS_RESTART_PREV}"
     fi
 
+    # Get list of FV3 restart files
+    local file_list
+    file_list=$(FV3_restarts)
     echo "Copying FV3 restarts for 'RUN=${RUN}' at '${restart_date}' from '${restart_dir}'"
-    for fv3_restart_file in "${fv3_restart_files[@]}"; do
-      restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${fv3_restart_file}"
-      ${NCP} "${restart_dir}/${restart_file}" "${DATA}/INPUT/${fv3_restart_file}" \
+    local fv3_file restart_file
+    for fv3_file in ${file_list}; do
+      restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${fv3_file}"
+      ${NCP} "${restart_dir}/${restart_file}" "${DATA}/INPUT/${fv3_file}" \
       || ( echo "FATAL ERROR: Unable to copy FV3 IC, ABORT!"; exit 1 )
     done
 
+    if [[ "${RERUN}" != "YES" ]]; then
+      # Replace sfc_data with sfcanl_data restart files from current cycle (if found)
+      local nn
+      for (( nn = 1; nn <= ntiles; nn++ )); do
+        if [[ -f "${COMOUT_ATMOS_RESTART}/${restart_date:0:8}.${restart_date:8:2}0000.sfcanl_data.tile${nn}.nc" ]]; then
+          rm -f "${DATA}/INPUT/sfc_data.tile${nn}.nc"
+          ${NCP} "${COMOUT_ATMOS_RESTART}/${restart_date:0:8}.${restart_date:8:2}0000.sfcanl_data.tile${nn}.nc" \
+                 "${DATA}/INPUT/sfc_data.tile${nn}.nc"
+        else
+          echo "'sfcanl_data.tile1.nc' not found in '${COMOUT_ATMOS_RESTART}', using 'sfc_data.tile1.nc'"
+          break
+        fi
+      done
+      # Replace fv_tracer with aeroanl_fv_tracer restart files from current cycle (if found)
+      local nn
+      local use_anl_aero="YES"
+      for (( nn = 1; nn <= ntiles; nn++ )); do
+        test_tracer_file="${COMOUT_ATMOS_RESTART}/${restart_date:0:8}.${restart_date:8:2}0000.aeroanl_fv_tracer.res.tile${nn}.nc"
+        if [[ ! -f  "${test_tracer_file}" ]]; then
+          use_anl_aero="NO"
+          echo "WARNING: File ${test_tracer_file} does not exist, will not replace any files from the aerosol analysis"
+          break
+        fi
+      done
+      if [[ ${use_anl_aero} == "YES" ]]; then
+        for (( nn = 1; nn <= ntiles; nn++ )); do
+          rm -f "${DATA}/INPUT/fv_tracer.res.tile${nn}.nc"
+          ${NCP} "${COMOUT_ATMOS_RESTART}/${restart_date:0:8}.${restart_date:8:2}0000.aeroanl_fv_tracer.res.tile${nn}.nc" \
+                 "${DATA}/INPUT/fv_tracer.res.tile${nn}.nc"
+        done
+      fi # if [[ ${use_anl_aero} == "YES" ]]; then
+    fi  # if [[ "${RERUN}" != "YES" ]]; then
+
+  fi  # if [[ "${warm_start}" == ".true." ]]; then
+
+  #============================================================================
+  # Determine increment files when doing cold start
+  if [[ "${warm_start}" == ".false." ]]; then
+
+    if [[ "${REPLAY_ICS:-NO}" == "YES" ]]; then
+      IAU_FHROT=${half_window}  # Replay ICs start at the end of the assimilation window
+      if (( MEMBER == 0 )); then
+        inc_files=()
+      else
+        inc_files=("atminc.nc")
+        read_increment=".true."
+        res_latlon_dynamics="atminc.nc"
+      fi
+      local increment_file
+      for inc_file in "${inc_files[@]}"; do
+        increment_file="${COMIN_ATMOS_INPUT}/${RUN}.t${cyc}z.${inc_file}"
+        if [[ -f "${increment_file}" ]]; then
+          ${NCP} "${increment_file}" "${DATA}/INPUT/${inc_file}"
+        else
+          echo "FATAL ERROR: missing increment file '${increment_file}', ABORT!"
+          exit 1
+        fi
+      done
+    fi
+
+  # Determine IAU and increment files when doing warm start
+  elif [[ "${warm_start}" == ".true." ]]; then
+
+    #--------------------------------------------------------------------------
     if [[ "${RERUN}" == "YES" ]]; then
 
       local restart_fhr
@@ -72,29 +120,16 @@ FV3_postdet() {
         IAU_INC_FILES="''"
       fi
 
+    #--------------------------------------------------------------------------
     else  # "${RERUN}" == "NO"
 
-      # Replace sfc_data with sfcanl_data restart files from current cycle (if found)
-      local nn
-      for (( nn = 1; nn <= ntiles; nn++ )); do
-        if [[ -f "${COM_ATMOS_RESTART}/${restart_date:0:8}.${restart_date:8:2}0000.sfcanl_data.tile${nn}.nc" ]]; then
-          rm -f "${DATA}/INPUT/sfc_data.tile${nn}.nc"
-          ${NCP} "${COM_ATMOS_RESTART}/${restart_date:0:8}.${restart_date:8:2}0000.sfcanl_data.tile${nn}.nc" \
-                 "${DATA}/INPUT/sfc_data.tile${nn}.nc"
-        else
-          echo "'sfcanl_data.tile1.nc' not found in '${COM_ATMOS_RESTART}', using 'sfc_data.tile1.nc'"
-          break
-        fi
-      done
-
       # Need a coupler.res that is consistent with the model start time
-      if [[ "${DOIAU}" == "YES" ]]; then
+      if [[ "${DOIAU:-NO}" == "YES" ]]; then
         local model_start_time="${previous_cycle}"
-        local model_current_time="${current_cycle_begin}"
       else
         local model_start_time="${current_cycle}"
-        local model_current_time="${current_cycle}"
       fi
+      local model_current_time="${model_start_date_current_cycle}"
       rm -f "${DATA}/INPUT/coupler.res"
       cat >> "${DATA}/INPUT/coupler.res" << EOF
       3        (Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)
@@ -124,11 +159,20 @@ EOF
         inc_files=("atminc.nc")
         read_increment=".true."
         res_latlon_dynamics="atminc.nc"
+        if [[ "${REPLAY_ICS:-NO}" == "YES" ]]; then
+          IAU_FHROT=${half_window}  # Replay ICs start at the end of the assimilation window
+          # Control member has no perturbation
+          if (( MEMBER == 0 )); then
+            inc_files=()
+            read_increment=".false."
+            res_latlon_dynamics='""'
+          fi
+        fi
       fi
 
       local increment_file
       for inc_file in "${inc_files[@]}"; do
-        increment_file="${COM_ATMOS_ANALYSIS}/${RUN}.t${cyc}z.${PREFIX_ATMINC}${inc_file}"
+        increment_file="${COMIN_ATMOS_ANALYSIS}/${RUN}.t${cyc}z.${PREFIX_ATMINC}${inc_file}"
         if [[ -f "${increment_file}" ]]; then
           ${NCP} "${increment_file}" "${DATA}/INPUT/${inc_file}"
         else
@@ -138,17 +182,22 @@ EOF
       done
 
     fi  # if [[ "${RERUN}" == "YES" ]]; then
+    #--------------------------------------------------------------------------
 
   fi  # if [[ "${warm_start}" == ".true." ]]; then
+  #============================================================================
 
+  #============================================================================
   # If doing IAU, change forecast hours
-  if [[ "${DOIAU:-}" == "YES" ]]; then
+  if [[ "${DOIAU:-NO}" == "YES" ]]; then
     FHMAX=$((FHMAX + 6))
     if (( FHMAX_HF > 0 )); then
       FHMAX_HF=$((FHMAX_HF + 6))
     fi
   fi
+  #============================================================================
 
+  #============================================================================
   # If warm starting from restart files, set the following flags
   if [[ "${warm_start}" == ".true." ]]; then
 
@@ -165,7 +214,43 @@ EOF
     na_init=0
 
   fi  # warm_start == .true.
+  #============================================================================
 
+  #============================================================================
+  if [[ "${QUILTING}" = ".true." ]] && [[ "${OUTPUT_GRID}" = "gaussian_grid" ]]; then
+    local FH2 FH3
+    for fhr in ${FV3_OUTPUT_FH}; do
+      FH3=$(printf %03i "${fhr}")
+      FH2=$(printf %02i "${fhr}")
+      # When replaying, the time format outputted by model in filename is HH-MM-SS
+      # because first fhr is a decimal number
+      if [[ ${REPLAY_ICS:-NO} == "YES" ]] && (( fhr >= OFFSET_START_HOUR )); then
+        local hhmmss_substring=${FV3_OUTPUT_FH_hhmmss/" ${FH3}-"*/} # Extract substring that contains all lead times up to the one space before target lead HHH-MM-SS
+        local hhmmss_substring_len=$(( ${#hhmmss_substring} + 1 )) # Get the size of the substring and add 1 to account for space
+        local f_hhmmss=${FV3_OUTPUT_FH_hhmmss:${hhmmss_substring_len}:9} # extract HHH-MM-SS for target lead time
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.atmf${FH3}.nc" "atmf${f_hhmmss}.nc"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.sfcf${FH3}.nc" "sfcf${f_hhmmss}.nc"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.atm.logf${FH3}.txt" "log.atm.f${f_hhmmss}"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.cubed_sphere_grid_atmf${FH3}.nc" "cubed_sphere_grid_atmf${f_hhmmss}.nc"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.cubed_sphere_grid_sfcf${FH3}.nc" "cubed_sphere_grid_sfcf${f_hhmmss}.nc"
+      else
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.atmf${FH3}.nc" "atmf${FH3}.nc"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.sfcf${FH3}.nc" "sfcf${FH3}.nc"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.atm.logf${FH3}.txt" "log.atm.f${FH3}"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.cubed_sphere_grid_atmf${FH3}.nc" "cubed_sphere_grid_atmf${FH3}.nc"
+        ${NLN} "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.cubed_sphere_grid_sfcf${FH3}.nc" "cubed_sphere_grid_sfcf${FH3}.nc"
+      fi
+      if [[ "${WRITE_DOPOST}" == ".true." ]]; then
+        ${NLN} "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.master.grb2f${FH3}" "GFSPRS.GrbF${FH2}"
+        ${NLN} "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.sfluxgrbf${FH3}.grib2" "GFSFLX.GrbF${FH2}"
+        if [[ "${DO_NEST:-NO}" == "YES" ]] ; then
+          ${NLN} "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.nest.grb2f${FH3}" "GFSPRS.GrbF${FH2}.nest02"
+          ${NLN} "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.nest.sfluxgrbf${FH3}.grib2" "GFSFLX.GrbF${FH2}.nest02"
+        fi
+      fi
+    done
+  fi
+  #============================================================================
   echo "Exiting ${FUNCNAME[0]}"
   toc "${FUNCNAME[0]}"
 }
@@ -176,7 +261,14 @@ FV3_nml() {
   source "${USHgfs}/parsing_namelists_FV3.sh"
   source "${USHgfs}/parsing_model_configure_FV3.sh"
 
-  FV3_namelists
+  # Call the appropriate namelist functions
+  if [[ "${DO_NEST:-NO}" == "YES" ]] ; then
+    source "${USHgfs}/parsing_namelists_FV3_nest.sh"
+    FV3_namelists_nest global
+    FV3_namelists_nest nest
+  else
+    FV3_namelists
+  fi
   FV3_model_configure
 
 }
@@ -186,49 +278,47 @@ FV3_out() {
   tic "${FUNCNAME[0]}"
 
   # Copy configuration files
-  if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then
-    ${NCP} "${DATA}/input.nml" "${COM_CONF}/ufs.input.nml"
-    ${NCP} "${DATA}/model_configure" "${COM_CONF}/ufs.model_configure"
-    ${NCP} "${DATA}/ufs.configure" "${COM_CONF}/ufs.ufs.configure"
-    ${NCP} "${DATA}/diag_table" "${COM_CONF}/ufs.diag_table"
-  fi
+  ${NCP} "${DATA}/input.nml" "${COMOUT_CONF}/ufs.input.nml"
+  ${NCP} "${DATA}/model_configure" "${COMOUT_CONF}/ufs.model_configure"
+  ${NCP} "${DATA}/ufs.configure" "${COMOUT_CONF}/ufs.ufs.configure"
+  ${NCP} "${DATA}/diag_table" "${COMOUT_CONF}/ufs.diag_table"
 
-  # Create an array of fv3 restart files
-  local fv3_restart_files tile_files fv3_restart_file restart_file
-  fv3_restart_files=(coupler.res fv_core.res.nc)
-  tile_files=(fv_core.res fv_srf_wnd.res fv_tracer.res phy_data sfc_data ca_data)
-  local nn tt
-  for (( nn = 1; nn <= ntiles; nn++ )); do
-    for tt in "${tile_files[@]}"; do
-      fv3_restart_files+=("${tt}.tile${nn}.nc")
-    done
-  done
+
+  # Determine the dates for restart files to be copied to COM
+  local restart_date restart_dates
+  restart_dates=()
 
   # Copy restarts in the assimilation window for RUN=gdas|enkfgdas|enkfgfs
   if [[ "${RUN}" =~ "gdas" || "${RUN}" == "enkfgfs" ]]; then
-    local restart_date
-    restart_date=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${restart_interval} hours" +%Y%m%d%H)
-    while (( restart_date < forecast_end_cycle )); do
-      echo "Copying FV3 restarts for 'RUN=${RUN}' at ${restart_date}"
-      for fv3_restart_file in "${fv3_restart_files[@]}"; do
-        restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${fv3_restart_file}"
-        ${NCP} "${DATArestart}/FV3_RESTART/${restart_file}" \
-               "${COM_ATMOS_RESTART}/${restart_file}"
-      done
+    restart_date="${model_start_date_next_cycle}"
+    while (( restart_date <= forecast_end_cycle )); do
+      restart_dates+=("${restart_date:0:8}.${restart_date:8:2}0000")
       restart_date=$(date --utc -d "${restart_date:0:8} ${restart_date:8:2} + ${restart_interval} hours" +%Y%m%d%H)
     done
+  elif [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then # Copy restarts at the end of the forecast segment for RUN=gfs|gefs
+    if [[ "${COPY_FINAL_RESTARTS}" == "YES" ]]; then
+      restart_dates+=("${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000")
+    fi
   fi
 
-  # Copy the final restart files at the end of the forecast segment
-  # The final restart written at the end of the forecast does not include the valid date
-  # TODO: verify the above statement since RM found that it did!
-  echo "Copying FV3 restarts for 'RUN=${RUN}' at the end of the forecast segment: ${forecast_end_cycle}"
-  for fv3_restart_file in "${fv3_restart_files[@]}"; do
-    restart_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.${fv3_restart_file}"
-    ${NCP} "${DATArestart}/FV3_RESTART/${restart_file}" \
-           "${COM_ATMOS_RESTART}/${restart_file}"
-  done
+  ### Check that there are restart files to copy
+  if [[ ${#restart_dates[@]} -gt 0 ]]; then
+    # Get list of FV3 restart files
+    local file_list fv3_file
+    file_list=$(FV3_restarts)
 
+    # Copy restarts for the dates collected above to COM
+    for restart_date in "${restart_dates[@]}"; do
+      echo "Copying FV3 restarts for 'RUN=${RUN}' at ${restart_date}"
+      for fv3_file in ${file_list}; do
+        ${NCP} "${DATArestart}/FV3_RESTART/${restart_date}.${fv3_file}" \
+               "${COMOUT_ATMOS_RESTART}/${restart_date}.${fv3_file}"
+      done
+    done
+
+  fi
+
+  # TODO: RM - Check if this is right
   # Copy FV3 history and inline post output to COM
   local FH2 FH3
   for fhr in ${FV3_OUTPUT_FH}; do
@@ -236,17 +326,18 @@ FV3_out() {
     FH2=$(printf %02i "${fhr}")
 
     # TODO: Replace ${DATA} with ${DATAoutput}/FV3_OUTPUT after UFWM PR 2554 is merged
-    ${NCP} "${DATA}/atmf${FH3}.nc"   "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.atmf${FH3}.nc"
-    ${NCP} "${DATA}/sfcf${FH3}.nc"   "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.sfcf${FH3}.nc"
-    ${NCP} "${DATA}/log.atm.f${FH3}" "${COM_ATMOS_HISTORY}/${RUN}.t${cyc}z.atm.logf${FH3}.txt"
+    ${NCP} "${DATA}/atmf${FH3}.nc"   "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.atmf${FH3}.nc"
+    ${NCP} "${DATA}/sfcf${FH3}.nc"   "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.sfcf${FH3}.nc"
+    ${NCP} "${DATA}/log.atm.f${FH3}" "${COMOUT_ATMOS_HISTORY}/${RUN}.t${cyc}z.atm.logf${FH3}.txt"
 
     if [[ "${WRITE_DOPOST}" == ".true." ]]; then
-      ${NCP} "${DATA}/GFSPRS.GrbF${FH2}"          "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.master.grb2f${FH3}"
-      ${NCP} "${DATA}/GFSFLX.GrbF${FH2}"          "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.sfluxgrbf${FH3}.grib2"
-      ${NCP} "${DATA}/log.atm.inlinepost.f${FH3}" "${COM_ATMOS_MASTER}/${RUN}.t${cyc}z.upp.logf${FH3}.txt"
+      ${NCP} "${DATA}/GFSPRS.GrbF${FH2}"          "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.master.grb2f${FH3}"
+      ${NCP} "${DATA}/GFSFLX.GrbF${FH2}"          "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.sfluxgrbf${FH3}.grib2"
+      ${NCP} "${DATA}/log.atm.inlinepost.f${FH3}" "${COMOUT_ATMOS_MASTER}/${RUN}.t${cyc}z.upp.logf${FH3}.txt"
     fi
   done
 
+  echo "SUB ${FUNCNAME[0]}: Output data for FV3 copied"
   echo "Exiting ${FUNCNAME[0]}"
   toc "${FUNCNAME[0]}"
 }
@@ -265,12 +356,8 @@ WW3_postdet() {
       restart_date="${RERUN_DATE}"
       restart_dir="${DATArestart}/WW3_RESTART"
     else
-      if [[ "${DOIAU}" == "YES" ]]; then
-        restart_date="${current_cycle_begin}"
-      else
-        restart_date="${current_cycle}"
-      fi
-      restart_dir="${COM_WAVE_RESTART_PREV}"
+      restart_date="${model_start_date_current_cycle}"
+      restart_dir="${COMIN_WAVE_RESTART_PREV}"
     fi
     echo "Copying WW3 restarts for 'RUN=${RUN}' at '${restart_date}' from '${restart_dir}'"
     local ww3_restart_file
@@ -318,12 +405,12 @@ WW3_out() {
   # TODO: Replace ${DATA} with ${DATAoutput}/WW3_OUTPUT after WW3 issue 1221 is resolved
   local wavprfx="${RUN}wave${WAV_MEMBER:-}"
   if [[ "${waveMULTIGRID}" == ".true." ]]; then
-    ${NCP} "${DATA}/log.mww3" "${COM_WAVE_HISTORY}/${wavprfx}.log.mww3.${PDY}${cyc}"
+    ${NCP} "${DATA}/log.mww3" "${COMOUT_WAVE_HISTORY}/${wavprfx}.log.mww3.${PDY}${cyc}"
     for ww3_grid in ${waveGRD}; do
-      ${NCP} "${DATA}/log.${ww3_grid}" "${COM_WAVE_HISTORY}/${wavprfx}.log.${ww3_grid}.${PDY}${cyc}"
+      ${NCP} "${DATA}/log.${ww3_grid}" "${COMOUT_WAVE_HISTORY}/${wavprfx}.log.${ww3_grid}.${PDY}${cyc}"
     done
   else
-    ${NCP} "${DATA}/log.ww3" "${COM_WAVE_HISTORY}/${wavprfx}.log.${waveGRD}.${PDY}${cyc}"
+    ${NCP} "${DATA}/log.ww3" "${COMOUT_WAVE_HISTORY}/${wavprfx}.log.${waveGRD}.${PDY}${cyc}"
   fi
 
   # Loop for gridded output (uses FHINC)
@@ -334,10 +421,10 @@ WW3_out() {
     vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d.%H0000)
     if [[ "${waveMULTIGRID}" == ".true." ]]; then
       for ww3_grid in ${waveGRD} ; do
-        ${NCP} "${DATA}/${vdate}.out_grd.${ww3_grid}" "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${ww3_grid}.${vdate}"
+        ${NCP} "${DATA}/${vdate}.out_grd.${ww3_grid}" "${COMOUT_WAVE_HISTORY}/${wavprfx}.out_grd.${ww3_grid}.${vdate}"
       done
     else
-      ${NCP} "${DATA}/${vdate}.out_grd.ww3" "${COM_WAVE_HISTORY}/${wavprfx}.out_grd.${waveGRD}.${vdate}"
+      ${NCP} "${DATA}/${vdate}.out_grd.ww3" "${COMOUT_WAVE_HISTORY}/${wavprfx}.out_grd.${waveGRD}.${vdate}"
     fi
     if (( FHMAX_HF_WAV > 0 && FHOUT_HF_WAV > 0 && fhr < FHMAX_HF_WAV )); then
       fhinc=${FHOUT_HF_WAV}
@@ -351,15 +438,24 @@ WW3_out() {
   while (( fhr <= FHMAX_WAV )); do
     vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d.%H0000)
     if [[ "${waveMULTIGRID}" == ".true." ]]; then
-      ${NCP} "${DATA}/${vdate}.out_pnt.${waveuoutpGRD}" "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}"
+      ${NCP} "${DATA}/${vdate}.out_pnt.${waveuoutpGRD}" "${COMOUT_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}"
     else
-      ${NCP} "${DATA}/${vdate}.out_pnt.ww3" "${COM_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}"
+      ${NCP} "${DATA}/${vdate}.out_pnt.ww3" "${COMOUT_WAVE_HISTORY}/${wavprfx}.out_pnt.${waveuoutpGRD}.${vdate}"
     fi
     fhr=$((fhr + fhinc))
   done
 
-  echo "Exiting ${FUNCNAME[0]}"
-  toc "${FUNCNAME[0]}"
+}
+
+WW3_nml() {
+  echo "SUB ${FUNCNAME[0]}: Copying input files for WW3"
+  source "${USHgfs}/parsing_namelists_WW3.sh"
+  WW3_namelists
+}
+
+WW3_out() {
+  echo "SUB ${FUNCNAME[0]}: Copying output data for WW3"
+  # TODO: Need to add logic to copy restarts from DATArestart/WW3_RESTART to COMOUT_WAVE_RESTART
 }
 
 
@@ -368,7 +464,7 @@ CPL_out() {
   tic "${FUNCNAME[0]}"
 
   if [[ "${esmf_profile:-}" == ".true." ]]; then
-    ${NCP} "${DATA}/ESMF_Profile.summary" "${COM_ATMOS_HISTORY}/ESMF_Profile.summary"
+    ${NCP} "${DATA}/ESMF_Profile.summary" "${COMOUT_ATMOS_HISTORY}/ESMF_Profile.summary"
   fi
 
   echo "Exiting ${FUNCNAME[0]}"
@@ -384,12 +480,8 @@ MOM6_postdet() {
     restart_dir="${DATArestart}/MOM6_RESTART"
     restart_date="${RERUN_DATE}"
   else  # "${RERUN}" == "NO"
-    restart_dir="${COM_OCEAN_RESTART_PREV}"
-    if [[ "${DOIAU}" == "YES" ]]; then
-      restart_date="${current_cycle_begin}"
-    else
-      restart_date="${current_cycle}"
-    fi
+    restart_dir="${COMIN_OCEAN_RESTART_PREV}"
+    restart_date="${model_start_date_current_cycle}"
   fi
 
   # Copy MOM6 ICs
@@ -411,7 +503,7 @@ MOM6_postdet() {
   # Copy increment (only when RERUN=NO)
   if [[ "${RERUN}" == "NO" ]]; then
     if [[ "${DO_JEDIOCNVAR:-NO}" == "YES" ]]; then
-      ${NCP} "${COM_OCEAN_ANALYSIS}/${RUN}.t${cyc}z.ocninc.nc" "${DATA}/INPUT/mom6_increment.nc" \
+      ${NCP} "${COMIN_OCEAN_ANALYSIS}/${RUN}.t${cyc}z.ocninc.nc" "${DATA}/INPUT/mom6_increment.nc" \
       || ( echo "FATAL ERROR: Unable to copy MOM6 increment, ABORT!"; exit 1 )
     fi
 
@@ -419,13 +511,65 @@ MOM6_postdet() {
     # TODO if [[ $RUN} == "gefs" ]] block maybe be needed
     #     to ensure it does not interfere with the GFS when ensemble is updated in the GFS
     if (( MEMBER > 0 )) && [[ "${ODA_INCUPD:-False}" == "True" ]]; then
-      ${NCP} "${COM_OCEAN_RESTART_PREV}/${restart_date:0:8}.${restart_date:0:8}0000.mom6_increment.nc" "${DATA}/INPUT/mom6_increment.nc" \
+      ${NCP} "${COMIN_OCEAN_ANALYSIS}/mom6_increment.nc" "${DATA}/INPUT/mom6_increment.nc" \
       || ( echo "FATAL ERROR: Unable to copy ensemble MOM6 increment, ABORT!"; exit 1 )
     fi
   fi  # if [[ "${RERUN}" == "NO" ]]; then
 
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
+
+  # Link output files
+  if [[ "${RUN}" =~ "gfs" || "${RUN}" == "gefs" ]]; then  # Link output files for RUN=gfs|enkfgfs|gefs
+
+    # Looping over MOM6 output hours
+    local fhr fhr3 last_fhr interval midpoint vdate vdate_mid source_file dest_file
+    for fhr in ${MOM6_OUTPUT_FH}; do
+      fhr3=$(printf %03i "${fhr}")
+
+      if [[ -z ${last_fhr:-} ]]; then
+        last_fhr=${fhr}
+        continue
+      fi
+
+      (( interval = fhr - last_fhr ))
+      (( midpoint = last_fhr + interval/2 ))
+
+      vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+      #If OFFSET_START_HOUR is greater than 0, OFFSET_START_HOUR should be added to the midpoint for first lead time
+      if (( OFFSET_START_HOUR > 0 )) &&  (( fhr == FHOUT_OCN ));then
+        vdate_mid=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + $(( midpoint + OFFSET_START_HOUR )) hours" +%Y%m%d%H)
+      else
+        vdate_mid=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${midpoint} hours" +%Y%m%d%H)
+      fi
+
+      # Native model output uses window midpoint in the filename, but we are mapping that to the end of the period for COM
+      if (( OFFSET_START_HOUR > 0 )) &&  (( fhr == FHOUT_OCN ));then
+        source_file="ocn_lead1_${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}.nc"
+      else
+        source_file="ocn_${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}.nc"
+      fi
+      dest_file="${RUN}.ocean.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
+      ${NLN} "${COMOUT_OCEAN_HISTORY}/${dest_file}" "${DATA}/MOM6_OUTPUT/${source_file}"
+
+      last_fhr=${fhr}
+
+    done
+
+  elif [[ "${RUN}" =~ "gdas" ]]; then  # Link output files for RUN=gdas|enkfgdas
+
+    # Save (instantaneous) MOM6 backgrounds
+    local fhr3 vdatestr
+    for fhr in ${MOM6_OUTPUT_FH}; do
+      fhr3=$(printf %03i "${fhr}")
+      vdatestr=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y_%m_%d_%H)
+      ${NLN} "${COMOUT_OCEAN_HISTORY}/${RUN}.ocean.t${cyc}z.inst.f${fhr3}.nc" "${DATA}/MOM6_OUTPUT/ocn_da_${vdatestr}.nc"
+    done
+  fi
+
+  echo "SUB ${FUNCNAME[0]}: MOM6 input data linked/copied"
+  echo "Exiting ${FUNCNAME[0]}"
+  toc "${FUNCNAME[0]}"
 
 }
 
@@ -440,18 +584,18 @@ MOM6_out() {
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  # Copy MOM_input from DATA to COM_OCEAN_INPUT after the forecast is run (and successfull)
-  ${NCP} "${DATA}/INPUT/MOM_input" "${COM_CONF}/ufs.MOM_input"
+  # Copy MOM_input from DATA to COMOUT_CONF after the forecast is run (and successfull)
+  ${NCP} "${DATA}/INPUT/MOM_input" "${COMOUT_CONF}/ufs.MOM_input"
 
   # Create a list of MOM6 restart files
   # Coarser than 1/2 degree has a single MOM restart
   local mom6_restart_files mom6_restart_file restart_file
   mom6_restart_files=(MOM.res.nc)
-  # 1/4 degree resolution has 4 additional restarts
+  # 1/4 degree resolution has 3 additional restarts
   case "${OCNRES}" in
     "025")
       local nn
-      for (( nn = 1; nn <= 4; nn++ )); do
+      for (( nn = 1; nn <= 3; nn++ )); do
         mom6_restart_files+=("MOM.res_${nn}.nc")
       done
       ;;
@@ -459,29 +603,27 @@ MOM6_out() {
   esac
 
   # Copy MOM6 restarts at the end of the forecast segment to COM for RUN=gfs|gefs
-  local restart_file
-  if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then
-    echo "Copying MOM6 restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
-    for mom6_restart_file in "${mom6_restart_files[@]}"; do
-      restart_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.${mom6_restart_file}"
-      ${NCP} "${DATArestart}/MOM6_RESTART/${restart_file}" \
-             "${COM_OCEAN_RESTART}/${restart_file}"
-    done
+  if [[ "${COPY_FINAL_RESTARTS}" == "YES" ]]; then
+    local restart_file
+    if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then
+      echo "Copying MOM6 restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
+      for mom6_restart_file in "${mom6_restart_files[@]}"; do
+        restart_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.${mom6_restart_file}"
+        ${NCP} "${DATArestart}/MOM6_RESTART/${restart_file}" \
+               "${COMOUT_OCEAN_RESTART}/${restart_file}"
+      done
+    fi
   fi
 
-  # Copy restarts at the beginning/middle of the next assimilation cycle to COM for RUN=gdas|enkfgdas|enkfgfs
+  # Copy restarts for the next cycle for RUN=gdas|enkfgdas|enkfgfs
   if [[ "${RUN}" =~ "gdas" || "${RUN}" == "enkfgfs" ]]; then
     local restart_date
-    if [[ "${DOIAU}" == "YES" ]]; then  # Copy restarts at the beginning of the next cycle from DATA to COM
-      restart_date="${next_cycle_begin}"
-    else  # Copy restarts at the middle of the next cycle from DATA to COM
-      restart_date="${next_cycle}"
-    fi
+    restart_date="${model_start_date_next_cycle}"
     echo "Copying MOM6 restarts for 'RUN=${RUN}' at ${restart_date}"
     for mom6_restart_file in "${mom6_restart_files[@]}"; do
       restart_file="${restart_date:0:8}.${restart_date:8:2}0000.${mom6_restart_file}"
       ${NCP} "${DATArestart}/MOM6_RESTART/${restart_file}" \
-             "${COM_OCEAN_RESTART}/${restart_file}"
+             "${COMOUT_OCEAN_RESTART}/${restart_file}"
     done
   fi
 
@@ -509,14 +651,14 @@ MOM6_out() {
       vdatestr="${vdate_mid:0:4}_${vdate_mid:4:2}_${vdate_mid:6:2}_${vdate_mid:8:2}"
       source_file="ocn_${vdatestr}.nc"
       dest_file="${RUN}.ocean.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
-      ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
+      ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COMOUT_OCEAN_HISTORY}/${dest_file}"
 
       # Daily output
       if (( fhr > 0 & fhr % 24 == 0 )); then
         vdatestr="${vdate:0:4}_${vdate:4:2}_${vdate:6:2}"
         source_file="ocn_daily_${vdatestr}.nc"
         dest_file="${RUN}.ocean.t${cyc}z.daily.f${fhr3}.nc"
-        ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COM_OCEAN_HISTORY}/${dest_file}"
+        ${NCP} "${DATAoutput}/MOM6_OUTPUT/${source_file}" "${COMOUT_OCEAN_HISTORY}/${dest_file}"
       fi
 
       last_fhr=${fhr}
@@ -538,7 +680,6 @@ MOM6_out() {
 
   echo "Exiting ${FUNCNAME[0]}"
   toc "${FUNCNAME[0]}"
-
 }
 
 CICE_postdet() {
@@ -552,17 +693,51 @@ CICE_postdet() {
     seconds=$(to_seconds "${restart_date:8:2}0000")  # convert HHMMSS to seconds
     cice_restart_file="${DATArestart}/CICE_RESTART/cice_model.res.${restart_date:0:4}-${restart_date:4:2}-${restart_date:6:2}-${seconds}.nc"
   else  # "${RERUN}" == "NO"
-    if [[ "${DOIAU}" == "YES" ]]; then
-      restart_date="${current_cycle_begin}"
-    else
-      restart_date="${current_cycle}"
+    restart_date="${model_start_date_current_cycle}"
+    cice_restart_file="${COMIN_ICE_RESTART_PREV}/${restart_date:0:8}.${restart_date:8:2}0000.cice_model.res.nc"
+    if [[ "${DO_JEDIOCNVAR:-NO}" == "YES" ]]; then
+      cice_restart_file="${COMIN_ICE_ANALYSIS}/${restart_date:0:8}.${restart_date:8:2}0000.cice_model_anl.res.nc"
     fi
-    cice_restart_file="${COM_ICE_RESTART_PREV}/${restart_date:0:8}.${restart_date:8:2}0000.cice_model.res.nc"
   fi
 
   # Copy CICE ICs
   ${NCP} "${cice_restart_file}" "${DATA}/cice_model.res.nc" \
   || ( echo "FATAL ERROR: Unable to copy CICE IC, ABORT!"; exit 1 )
+
+  # Link iceh_ic file to COM.  This is the initial condition file from CICE (f000)
+  # TODO: Is this file needed in COM? Is this going to be used for generating any products?
+  local vdate seconds vdatestr fhr fhr3 interval last_fhr
+  seconds=$(to_seconds "${model_start_date_current_cycle:8:2}0000")  # convert HHMMSS to seconds
+  vdatestr="${model_start_date_current_cycle:0:4}-${model_start_date_current_cycle:4:2}-${model_start_date_current_cycle:6:2}-${seconds}"
+  ${NLN} "${COMOUT_ICE_HISTORY}/${RUN}.ice.t${cyc}z.ic.nc" "${DATA}/CICE_OUTPUT/iceh_ic.${vdatestr}.nc"
+
+  # Link CICE forecast output files from DATA/CICE_OUTPUT to COM
+  local source_file dest_file
+  for fhr in "${CICE_OUTPUT_FH[@]}"; do
+
+    if [[ -z ${last_fhr:-} ]]; then
+      last_fhr=${fhr}
+      continue
+    fi
+
+    fhr3=$(printf %03i "${fhr}")
+    (( interval = fhr - last_fhr ))
+
+    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
+    seconds=$(to_seconds "${vdate:8:2}0000")  # convert HHMMSS to seconds
+    vdatestr="${vdate:0:4}-${vdate:4:2}-${vdate:6:2}-${seconds}"
+
+    if [[ "${RUN}" =~ "gfs" || "${RUN}" =~ "gefs" ]]; then
+      source_file="iceh_$(printf "%0.2d" "${FHOUT_ICE}")h.${vdatestr}.nc"
+      dest_file="${RUN}.ice.t${cyc}z.${interval}hr_avg.f${fhr3}.nc"
+    elif [[ "${RUN}" =~ "gdas" ]]; then
+      source_file="iceh_inst.${vdatestr}.nc"
+      dest_file="${RUN}.ice.t${cyc}z.inst.f${fhr3}.nc"
+    fi
+    ${NLN} "${COMOUT_ICE_HISTORY}/${dest_file}" "${DATA}/CICE_OUTPUT/${source_file}"
+
+    last_fhr=${fhr}
+  done
 
   echo "Exiting ${FUNCNAME[0]}"
   toc "${FUNCNAME[0]}"
@@ -579,34 +754,32 @@ CICE_out() {
   echo "Entering ${FUNCNAME[0]}"
   tic "${FUNCNAME[0]}"
 
-  # Copy ice_in namelist from DATA to COMOUTice after the forecast is run (and successfull)
-  ${NCP} "${DATA}/ice_in" "${COM_CONF}/ufs.ice_in"
+  # Copy ice_in namelist from DATA to COMOUT_CONF after the forecast is run (and successfull)
+  ${NCP} "${DATA}/ice_in" "${COMOUT_CONF}/ufs.ice_in"
 
   # Copy CICE restarts at the end of the forecast segment to COM for RUN=gfs|gefs
-  local seconds source_file target_file
-  if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then
-    echo "Copying CICE restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
-    seconds=$(to_seconds "${forecast_end_cycle:8:2}0000")  # convert HHMMSS to seconds
-    source_file="cice_model.res.${forecast_end_cycle:0:4}-${forecast_end_cycle:4:2}-${forecast_end_cycle:6:2}-${seconds}.nc"
-    target_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.cice_model.res.nc"
-    ${NCP} "${DATArestart}/CICE_RESTART/${source_file}" \
-           "${COM_ICE_RESTART}/${target_file}"
+  if [[ "${COPY_FINAL_RESTARTS}" == "YES" ]]; then
+    local seconds source_file target_file
+    if [[ "${RUN}" == "gfs" || "${RUN}" == "gefs" ]]; then
+      echo "Copying CICE restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
+      seconds=$(to_seconds "${forecast_end_cycle:8:2}0000")  # convert HHMMSS to seconds
+      source_file="cice_model.res.${forecast_end_cycle:0:4}-${forecast_end_cycle:4:2}-${forecast_end_cycle:6:2}-${seconds}.nc"
+      target_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.cice_model.res.nc"
+      ${NCP} "${DATArestart}/CICE_RESTART/${source_file}" \
+             "${COMOUT_ICE_RESTART}/${target_file}"
+    fi
   fi
 
-  # Copy restarts at the beginning/middle of the next assimilation cycle to COM for RUN=gdas|enkfgdas|enkfgfs
+  # Copy restarts for next cycle for RUN=gdas|enkfgdas|enkfgfs
   if [[ "${RUN}" =~ "gdas" || "${RUN}" == "enkfgfs" ]]; then
     local restart_date
-    if [[ "${DOIAU}" == "YES" ]]; then  # Copy restarts at the beginning of the next cycle from DATA to COM
-      restart_date="${next_cycle_begin}"
-    else  # Copy restarts at the middle of the next cycle from DATA to COM
-      restart_date="${next_cycle}"
-    fi
+    restart_date="${model_start_date_next_cycle}"
     echo "Copying CICE restarts for 'RUN=${RUN}' at ${restart_date}"
     seconds=$(to_seconds "${restart_date:8:2}0000")  # convert HHMMSS to seconds
     source_file="cice_model.res.${restart_date:0:4}-${restart_date:4:2}-${restart_date:6:2}-${seconds}.nc"
     target_file="${restart_date:0:8}.${restart_date:8:2}0000.cice_model.res.nc"
     ${NCP} "${DATArestart}/CICE_RESTART/${source_file}" \
-           "${COM_ICE_RESTART}/${target_file}"
+           "${COMOUT_ICE_RESTART}/${target_file}"
   fi
 
   # Copy CICE forecast output files to COM
@@ -699,13 +872,11 @@ GOCART_postdet() {
 
   local fhr vdate
   for fhr in ${GOCART_OUTPUT_FH}; do
-    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
-
+    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d_%H00z)
     # Delete existing files due to noclobber in GOCART
-    if [[ -e "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" ]]; then
-      rm -f "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4"
+    if [[ -e "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate}.nc4" ]]; then
+      rm -f "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate}.nc4"
     fi
-
   done
 
   echo "Exiting ${FUNCNAME[0]}"
@@ -721,9 +892,9 @@ GOCART_out() {
   for fhr in ${GOCART_OUTPUT_FH}; do
     if (( fhr == 0 )); then continue; fi
     fhr3=$(printf %03i "${fhr}")
-    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d%H)
-    ${NCP} "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate:0:8}_${vdate:8:2}00z.nc4" \
-           "${COM_CHEM_HISTORY}/${RUN}.gocart.t${cyc}z.inst_aod.${fhr3}.nc4"
+    vdate=$(date --utc -d "${current_cycle:0:8} ${current_cycle:8:2} + ${fhr} hours" +%Y%m%d_%H00z)
+    ${NCP} "${DATAoutput}/GOCART_OUTPUT/gocart.inst_aod.${vdate}.nc4" \
+           "${COMOUT_CHEM_HISTORY}/${RUN}.gocart.t${cyc}z.inst_aod.${fhr3}.nc4"
   done
 
   echo "Exiting ${FUNCNAME[0]}"
@@ -744,12 +915,8 @@ CMEPS_postdet() {
       seconds=$(to_seconds "${restart_date:8:2}0000")  # convert HHMMSS to seconds
       cmeps_restart_file="${DATArestart}/CMEPS_RESTART/ufs.cpld.cpl.r.${restart_date:0:4}-${restart_date:4:2}-${restart_date:6:2}-${seconds}.nc"
     else  # "${RERUN}" == "NO"
-      if [[ "${DOIAU}" == "YES" ]]; then
-        restart_date="${current_cycle_begin}"
-      else
-        restart_date="${current_cycle}"
-      fi
-      cmeps_restart_file="${COM_MED_RESTART_PREV}/${restart_date:0:8}.${restart_date:8:2}0000.ufs.cpld.cpl.r.nc"
+      restart_date="${model_start_date_current_cycle}"
+      cmeps_restart_file="${COMIN_MED_RESTART_PREV}/${restart_date:0:8}.${restart_date:8:2}0000.ufs.cpld.cpl.r.nc"
     fi
 
     # Copy CMEPS restarts
@@ -782,33 +949,31 @@ CMEPS_out() {
   tic "${FUNCNAME[0]}"
 
   # Copy mediator restarts at the end of the forecast segment to COM for RUN=gfs|gefs
-  echo "Copying mediator restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
-  local seconds source_file target_file
-  seconds=$(to_seconds "${forecast_end_cycle:8:2}"0000)
-  source_file="ufs.cpld.cpl.r.${forecast_end_cycle:0:4}-${forecast_end_cycle:4:2}-${forecast_end_cycle:6:2}-${seconds}.nc"
-  target_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.ufs.cpld.cpl.r.nc"
-  if [[ -f "${DATArestart}/CMEPS_RESTART/${source_file}" ]]; then
-    ${NCP} "${DATArestart}/CMEPS_RESTART/${source_file}" \
-           "${COM_MED_RESTART}/${target_file}"
-  else
-    echo "Mediator restart '${DATArestart}/CMEPS_RESTART/${source_file}' not found."
+  if [[ "${COPY_FINAL_RESTARTS}" == "YES" ]]; then
+    echo "Copying mediator restarts for 'RUN=${RUN}' at ${forecast_end_cycle}"
+    local seconds source_file target_file
+    seconds=$(to_seconds "${forecast_end_cycle:8:2}"0000)
+    source_file="ufs.cpld.cpl.r.${forecast_end_cycle:0:4}-${forecast_end_cycle:4:2}-${forecast_end_cycle:6:2}-${seconds}.nc"
+    target_file="${forecast_end_cycle:0:8}.${forecast_end_cycle:8:2}0000.ufs.cpld.cpl.r.nc"
+    if [[ -f "${DATArestart}/CMEPS_RESTART/${source_file}" ]]; then
+      ${NCP} "${DATArestart}/CMEPS_RESTART/${source_file}" \
+             "${COMOUT_MED_RESTART}/${target_file}"
+    else
+      echo "Mediator restart '${DATArestart}/CMEPS_RESTART/${source_file}' not found."
+    fi
   fi
 
-  # Copy restarts at the beginning/middle of the next assimilation cycle to COM for RUN=gdas|enkfgdas|enkfgfs
+  # Copy restarts for the next cycle to COM for RUN=gdas|enkfgdas|enkfgfs
   if [[ "${RUN}" =~ "gdas" || "${RUN}" == "enkfgfs" ]]; then
     local restart_date
-    if [[ "${DOIAU}" == "YES" ]]; then  # Copy restarts at the beginning of the next cycle from DATA to COM
-      restart_date="${next_cycle_begin}"
-    else  # Copy restarts at the middle of the next cycle from DATA to COM
-      restart_date="${next_cycle}"
-    fi
+    restart_date="${model_start_date_next_cycle}"
     echo "Copying mediator restarts for 'RUN=${RUN}' at ${restart_date}"
     seconds=$(to_seconds "${restart_date:8:2}"0000)
     source_file="ufs.cpld.cpl.r.${restart_date:0:4}-${restart_date:4:2}-${restart_date:6:2}-${seconds}.nc"
     target_file="${restart_date:0:8}.${restart_date:8:2}0000.ufs.cpld.cpl.r.nc"
     if [[ -f "${DATArestart}/CMEPS_RESTART/${source_file}" ]]; then
       ${NCP} "${DATArestart}/CMEPS_RESTART/${source_file}" \
-             "${COM_MED_RESTART}/${target_file}"
+             "${COMOUT_MED_RESTART}/${target_file}"
     else
       echo "Mediator restart '${DATArestart}/CMEPS_RESTART/${source_file}' not found."
     fi

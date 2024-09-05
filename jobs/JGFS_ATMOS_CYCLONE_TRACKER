@@ -3,6 +3,10 @@
 source "${HOMEgfs}/ush/preamble.sh"
 source "${HOMEgfs}/ush/jjob_header.sh" -e "tracker" -c "base tracker"
 
+# Hack to temporary skip this as the tracker has not been build
+#   on Hercules Rocky 9 yet
+# TODO: Remove this after tracker has been built for Rocky 9 #2639
+if [[ "${machine}" == 'HERCULES' ]]; then exit 0; fi
 
 export COMPONENT="atmos"
 
@@ -11,7 +15,6 @@ export COMPONENT="atmos"
 # Set variables used in the exglobal script
 ##############################################
 export CDATE=${CDATE:-${PDY}${cyc}}
-export CDUMP=${RUN/enkf}
 
 
 ####################################
@@ -66,7 +69,7 @@ fi
 #############################################################
 # Execute the script
 export pert="p01"
-export cmodel=${CDUMP}
+export cmodel=${RUN/enkf}
 export loopnum=1
 
 #-----------input data checking -----------------

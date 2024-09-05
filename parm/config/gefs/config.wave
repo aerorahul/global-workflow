@@ -10,10 +10,10 @@ echo "BEGIN: config.wave"
 # Some others are also used across the workflow in wave component scripts
 
 # General runtime labels
-export CDUMPwave="${RUN}wave"
+export RUNwave="${RUN}wave"
 
 # In GFS/GDAS, restart files are generated/read from gdas runs
-export CDUMPRSTwave="gdas"
+export RUNRSTwave="gdas"
 
 #grid dependent variable defaults
 export waveGRDN='1'                   # grid number for ww3_multi
@@ -56,6 +56,12 @@ case "${waveGRD}" in
     export wavepostGRD='glo_025'
     export waveuoutpGRD=${waveGRD}
     ;;
+  "glo_100")
+    #Global regular lat/lon 1deg deg grid
+    export waveinterpGRD=''
+    export wavepostGRD='glo_100'
+    export waveuoutpGRD=${waveGRD}
+    ;;
   "glo_200")
     #Global regular lat/lon 2deg deg grid
     export waveinterpGRD=''
@@ -79,14 +85,9 @@ export WAVEWND_DID=
 export WAVEWND_FID=
 
 # The start time reflects the number of hindcast hours prior to the cycle initial time
-export FHMAX_WAV=${FHMAX_GFS}
 export WAVHINDH=0
-export FHMIN_WAV=0
-export FHOUT_WAV=3
-export FHMAX_HF_WAV=120
-export FHOUT_HF_WAV=1
 export FHMAX_WAV_IBP=180
-if (( FHMAX_WAV < FHMAX_WAV_IBP )); then export FHMAX_WAV_IBP=${FHMAX_GFS} ; fi
+if (( FHMAX_WAV < FHMAX_WAV_IBP )); then export FHMAX_WAV_IBP=${FHMAX_WAV} ; fi
 
 # gridded and point output rate
 export DTFLD_WAV=$(( FHOUT_HF_WAV * 3600 ))

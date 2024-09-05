@@ -35,8 +35,10 @@ fix/gsi
 fix/lut
 fix/mom6
 fix/orog
+fix/orog_nest
 fix/sfc_climo
 fix/ugwd
+fix/ugwd_nest
 fix/verif
 fix/wave
 
@@ -48,6 +50,8 @@ parm/gdas/io
 parm/gdas/ioda
 parm/gdas/snow
 parm/gdas/soca
+parm/gdas/jcb-gdas
+parm/gdas/jcb-algorithms
 parm/monitor
 parm/post/AEROSOL_LUTS.dat
 parm/post/nam_micro_lookup.dat
@@ -106,6 +110,7 @@ parm/post/ice.csv
 parm/post/ocnicepost.nml.jinja2
 parm/ufs/noahmptable.tbl
 parm/ufs/model_configure.IN
+parm/ufs/model_configure_nest.IN
 parm/ufs/MOM_input_*.IN
 parm/ufs/MOM6_data_table.IN
 parm/ufs/ice_in.IN
@@ -161,6 +166,14 @@ scripts/exemcsfc_global_sfc_prep.sh
 scripts/exgdas_global_marine_analysis_ecen.py
 scripts/exglobal_prep_ocean_obs.py
 # ush symlinks
+ush/bufr2ioda_insitu_profile_argo.py
+ush/bufr2ioda_insitu_profile_bathy.py
+ush/bufr2ioda_insitu_profile_glider.py
+ush/bufr2ioda_insitu_profile_marinemammal.py
+ush/bufr2ioda_insitu_profile_tesac.py
+ush/bufr2ioda_insitu_profile_xbtctd.py
+ush/bufr2ioda_insitu_surface_altkob.py
+ush/bufr2ioda_insitu_surface_trkob.py
 ush/chgres_cube.sh
 ush/emcsfc_ice_blend.sh
 ush/emcsfc_snow.sh
@@ -171,6 +184,8 @@ ush/fv3gfs_make_grid.sh
 ush/fv3gfs_make_orog.sh
 ush/gen_bufr2ioda_json.py
 ush/gen_bufr2ioda_yaml.py
+ush/bufr2ioda_insitu_profile*.py
+ush/bufr2ioda_insitu_surface*.py
 ush/global_chgres.sh
 ush/global_chgres_driver.sh
 ush/global_cycle.sh
@@ -185,6 +200,7 @@ ush/month_name.sh
 ush/imsfv3_scf2ioda.py
 ush/atparse.bash
 ush/run_bufr2ioda.py
+ush/bufr2ioda_insitu*
 
 # version files
 versions/build.ver
@@ -194,3 +210,8 @@ versions/run.ver
 ush/python/wxflow
 workflow/wxflow
 ci/scripts/wxflow
+
+# jcb checkout and symlinks
+ush/python/jcb
+workflow/jcb
+ci/scripts/jcb

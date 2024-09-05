@@ -70,39 +70,10 @@ elif [[ ${MACHINE_ID} = stampede* ]] ; then
 elif [[ ${MACHINE_ID} = gaea* ]] ; then
     # We are on GAEA.
     if ( ! eval module help > /dev/null 2>&1 ) ; then
-        # We cannot simply load the module command.  The GAEA
-        # /etc/profile modifies a number of module-related variables
-        # before loading the module command.  Without those variables,
-        # the module command fails.  Hence we actually have to source
-        # /etc/profile here.
+        source /usr/share/lmod/lmod/init/bash
         source /etc/profile
-        __ms_source_etc_profile=yes
-    else
-        __ms_source_etc_profile=no
     fi
-    module purge
-    # clean up after purge
-    unset _LMFILES_
-    unset _LMFILES_000
-    unset _LMFILES_001
-    unset LOADEDMODULES
-    module load modules
-    if [[ -d /opt/cray/ari/modulefiles ]] ; then
-        module use -a /opt/cray/ari/modulefiles
-    fi
-    if [[ -d /opt/cray/pe/ari/modulefiles ]] ; then
-        module use -a /opt/cray/pe/ari/modulefiles
-    fi
-    if [[ -d /opt/cray/pe/craype/default/modulefiles ]] ; then
-        module use -a /opt/cray/pe/craype/default/modulefiles
-    fi
-    if [[ -s /etc/opt/cray/pe/admin-pe/site-config ]] ; then
-        source /etc/opt/cray/pe/admin-pe/site-config
-    fi
-    if [[ "${__ms_source_etc_profile}" == yes ]] ; then
-        source /etc/profile
-        unset __ms_source_etc_profile
-    fi
+    module reset
 
 elif [[ ${MACHINE_ID} = expanse* ]]; then
     # We are on SDSC Expanse
@@ -121,10 +92,8 @@ elif [[ ${MACHINE_ID} = discover* ]]; then
 # TODO: This can likely be made more general once other cloud
 # platforms come online.
 elif [[ ${MACHINE_ID} = "noaacloud" ]]; then
-
-    export SPACK_ROOT=/contrib/global-workflow/spack-stack/spack
-    export PATH=${PATH}:${SPACK_ROOT}/bin
-    . "${SPACK_ROOT}"/share/spack/setup-env.sh
+    # We are on NOAA Cloud
+    module purge
 
 else
     echo WARNING: UNKNOWN PLATFORM 1>&2

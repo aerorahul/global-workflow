@@ -12,18 +12,11 @@ if [[ ${DONST} = "YES" ]]; then
   . ${EXPDIR}/config.nsst
 fi
 
-if [[ "${CDUMP}" = "gfs" ]] ; then
+if [[ "${RUN}" == "gfs" ]] ; then
   export USE_RADSTAT="NO" # This can be only used when bias correction is not-zero.
   export GENDIAG="NO"
   export SETUP='diag_rad=.false.,diag_pcp=.false.,diag_conv=.false.,diag_ozone=.false.,write_diag(3)=.false.,niter(2)=100,'
   export DIAG_TARBALL="YES"
-fi
-
-export npe_gsi=${npe_anal}
-
-if [[ "${CDUMP}" == "gfs" ]] ; then
-  export npe_gsi=${npe_anal_gfs}
-  export nth_anal=${nth_anal_gfs}
 fi
 
 # Set parameters specific to L127

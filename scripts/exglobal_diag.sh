@@ -26,7 +26,6 @@ pwd=$(pwd)
 
 # Base variables
 CDATE="${PDY}${cyc}"
-CDUMP=${CDUMP:-"gdas"}
 GDUMP=${GDUMP:-"gdas"}
 
 # Utilities
@@ -222,7 +221,7 @@ EOFdiag
       chmod 755 $DATA/mp_diag.sh
       ncmd=$(cat $DATA/mp_diag.sh | wc -l)
       if [ $ncmd -gt 0 ]; then
-         ncmd_max=$((ncmd < npe_node_max ? ncmd : npe_node_max))
+         ncmd_max=$((ncmd < max_tasks_per_node ? ncmd : max_tasks_per_node))
          APRUNCFP_DIAG=$(eval echo $APRUNCFP)
          $APRUNCFP_DIAG $DATA/mp_diag.sh
          export err=$?; err_chk
@@ -232,9 +231,11 @@ EOFdiag
    # Restrict diagnostic files containing rstprod data
    rlist="conv_gps conv_ps conv_pw conv_q conv_sst conv_t conv_uv saphir"
    for rtype in $rlist; do
-      set +e
-      ${CHGRP_CMD} *${rtype}*
-      ${STRICT_ON:-set -e}
+      for rfile in *"${rtype}"*; do 
+         if [[ -s "${rfile}" ]]; then
+            ${CHGRP_CMD} "${rfile}"
+         fi
+      done
    done
 
    # If requested, create diagnostic file tarballs

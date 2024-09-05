@@ -21,14 +21,14 @@ class GFSCycledAppConfig(AppConfig):
         self.do_vrfy_oceanda = self._base.get('DO_VRFY_OCEANDA', False)
 
         self.lobsdiag_forenkf = False
-        self.eupd_cdumps = None
+        self.eupd_runs = None
         if self.do_hybvar:
             self.lobsdiag_forenkf = self._base.get('lobsdiag_forenkf', False)
-            eupd_cdump = self._base.get('EUPD_CYC', 'gdas').lower()
-            if eupd_cdump in ['both']:
-                self.eupd_cdumps = ['gfs', 'gdas']
-            elif eupd_cdump in ['gfs', 'gdas']:
-                self.eupd_cdumps = [eupd_cdump]
+            eupd_run = self._base.get('EUPD_CYC', 'gdas').lower()
+            if eupd_run in ['both']:
+                self.eupd_runs = ['gfs', 'gdas']
+            elif eupd_run in ['gfs', 'gdas']:
+                self.eupd_runs = [eupd_run]
 
     def _get_app_configs(self):
         """
@@ -43,7 +43,7 @@ class GFSCycledAppConfig(AppConfig):
             configs += ['anal', 'analdiag']
 
         if self.do_jediocnvar:
-            configs += ['prepoceanobs', 'ocnanalprep', 'ocnanalbmat', 'ocnanalrun']
+            configs += ['prepoceanobs', 'ocnanalprep', 'marinebmat', 'ocnanalrun']
             if self.do_hybvar:
                 configs += ['ocnanalecen']
             configs += ['ocnanalchkpt', 'ocnanalpost']
@@ -53,11 +53,11 @@ class GFSCycledAppConfig(AppConfig):
         if self.do_ocean or self.do_ice:
             configs += ['oceanice_products']
 
-        configs += ['sfcanl', 'analcalc', 'fcst', 'upp', 'atmos_products', 'arch', 'cleanup']
+        configs += ['stage_ic', 'sfcanl', 'analcalc', 'fcst', 'upp', 'atmos_products', 'arch', 'cleanup']
 
         if self.do_hybvar:
             if self.do_jediatmens:
-                configs += ['atmensanlinit', 'atmensanlrun', 'atmensanlfinal']
+                configs += ['atmensanlinit', 'atmensanlobs', 'atmensanlsol', 'atmensanlletkf', 'atmensanlfv3inc', 'atmensanlfinal']
             else:
                 configs += ['eobs', 'eomg', 'ediag', 'eupd']
             configs += ['ecen', 'esfc', 'efcs', 'echgres', 'epos', 'earc']
@@ -107,10 +107,14 @@ class GFSCycledAppConfig(AppConfig):
                 configs += ['waveawipsbulls', 'waveawipsgridded']
 
         if self.do_aero:
-            configs += ['aeroanlinit', 'aeroanlrun', 'aeroanlfinal']
+            configs += ['aeroanlgenb', 'aeroanlinit', 'aeroanlvar', 'aeroanlfinal']
+            if self.do_prep_obs_aero:
+                configs += ['prepobsaero']
 
         if self.do_jedisnowda:
             configs += ['prepsnowobs', 'snowanl']
+            if self.do_hybvar:
+                configs += ['esnowrecen']
 
         if self.do_mos:
             configs += ['mos_stn_prep', 'mos_grd_prep', 'mos_ext_stn_prep', 'mos_ext_grd_prep',
@@ -121,7 +125,7 @@ class GFSCycledAppConfig(AppConfig):
         return configs
 
     @staticmethod
-    def _update_base(base_in):
+    def update_base(base_in):
 
         return GFSCycledAppConfig.get_gfs_cyc_dates(base_in)
 
@@ -141,7 +145,7 @@ class GFSCycledAppConfig(AppConfig):
             gdas_gfs_common_tasks_before_fcst += ['anal']
 
         if self.do_jediocnvar:
-            gdas_gfs_common_tasks_before_fcst += ['prepoceanobs', 'ocnanalprep', 'ocnanalbmat', 'ocnanalrun']
+            gdas_gfs_common_tasks_before_fcst += ['prepoceanobs', 'ocnanalprep', 'marinebmat', 'ocnanalrun']
             if self.do_hybvar:
                 gdas_gfs_common_tasks_before_fcst += ['ocnanalecen']
             gdas_gfs_common_tasks_before_fcst += ['ocnanalchkpt', 'ocnanalpost']
@@ -149,9 +153,6 @@ class GFSCycledAppConfig(AppConfig):
                 gdas_gfs_common_tasks_before_fcst += ['ocnanalvrfy']
 
         gdas_gfs_common_tasks_before_fcst += ['sfcanl', 'analcalc']
-
-        if self.do_aero:
-            gdas_gfs_common_tasks_before_fcst += ['aeroanlinit', 'aeroanlrun', 'aeroanlfinal']
 
         if self.do_jedisnowda:
             gdas_gfs_common_tasks_before_fcst += ['prepsnowobs', 'snowanl']
@@ -164,11 +165,14 @@ class GFSCycledAppConfig(AppConfig):
         hybrid_after_eupd_tasks = []
         if self.do_hybvar:
             if self.do_jediatmens:
-                hybrid_tasks += ['atmensanlinit', 'atmensanlrun', 'atmensanlfinal', 'echgres']
+                hybrid_tasks += ['atmensanlinit', 'atmensanlfv3inc', 'atmensanlfinal', 'echgres']
+                hybrid_tasks += ['atmensanlobs', 'atmensanlsol'] if self.lobsdiag_forenkf else ['atmensanlletkf']
             else:
                 hybrid_tasks += ['eobs', 'eupd', 'echgres']
                 hybrid_tasks += ['ediag'] if self.lobsdiag_forenkf else ['eomg']
-            hybrid_after_eupd_tasks += ['ecen', 'esfc', 'efcs', 'epos', 'earc', 'cleanup']
+            if self.do_jedisnowda:
+                hybrid_tasks += ['esnowrecen']
+            hybrid_after_eupd_tasks += ['stage_ic', 'ecen', 'esfc', 'efcs', 'epos', 'earc', 'cleanup']
 
         # Collect all "gdas" cycle tasks
         gdas_tasks = gdas_gfs_common_tasks_before_fcst.copy()
@@ -176,16 +180,21 @@ class GFSCycledAppConfig(AppConfig):
         if not self.do_jediatmvar:
             gdas_tasks += ['analdiag']
 
-        if self.do_wave and 'gdas' in self.wave_cdumps:
+        if self.do_wave and 'gdas' in self.wave_runs:
             gdas_tasks += wave_prep_tasks
 
-        gdas_tasks += ['atmanlupp', 'atmanlprod', 'fcst']
+        if self.do_aero and 'gdas' in self.aero_anl_runs:
+            gdas_tasks += ['aeroanlgenb', 'aeroanlinit', 'aeroanlvar', 'aeroanlfinal']
+            if self.do_prep_obs_aero:
+                gdas_tasks += ['prepobsaero']
+
+        gdas_tasks += ['stage_ic', 'atmanlupp', 'atmanlprod', 'fcst']
 
         if self.do_upp:
             gdas_tasks += ['atmupp']
         gdas_tasks += ['atmos_prod']
 
-        if self.do_wave and 'gdas' in self.wave_cdumps:
+        if self.do_wave and 'gdas' in self.wave_runs:
             if self.do_wave_bnd:
                 gdas_tasks += wave_bndpnt_tasks
             gdas_tasks += wave_post_tasks
@@ -210,8 +219,13 @@ class GFSCycledAppConfig(AppConfig):
         # Collect "gfs" cycle tasks
         gfs_tasks = gdas_gfs_common_tasks_before_fcst.copy()
 
-        if self.do_wave and 'gfs' in self.wave_cdumps:
+        if self.do_wave and 'gfs' in self.wave_runs:
             gfs_tasks += wave_prep_tasks
+
+        if self.do_aero and 'gfs' in self.aero_anl_runs:
+            gfs_tasks += ['aeroanlinit', 'aeroanlvar', 'aeroanlfinal']
+            if self.do_prep_obs_aero:
+                gfs_tasks += ['prepobsaero']
 
         gfs_tasks += ['atmanlupp', 'atmanlprod', 'fcst']
 
@@ -243,7 +257,7 @@ class GFSCycledAppConfig(AppConfig):
         if self.do_metp:
             gfs_tasks += ['metp']
 
-        if self.do_wave and 'gfs' in self.wave_cdumps:
+        if self.do_wave and 'gfs' in self.wave_runs:
             if self.do_wave_bnd:
                 gfs_tasks += wave_bndpnt_tasks
             gfs_tasks += wave_post_tasks
@@ -264,7 +278,7 @@ class GFSCycledAppConfig(AppConfig):
                 gfs_tasks += ['gempakpgrb2spec']
 
         if self.do_awips:
-            gfs_tasks += ['awips_20km_1p0deg', 'awips_g2', 'fbwind']
+            gfs_tasks += ['awips_20km_1p0deg', 'fbwind']
 
         if self.do_mos:
             gfs_tasks += ['mos_stn_prep', 'mos_grd_prep', 'mos_ext_stn_prep', 'mos_ext_grd_prep',
@@ -277,17 +291,18 @@ class GFSCycledAppConfig(AppConfig):
         tasks = dict()
         tasks['gdas'] = gdas_tasks
 
-        if self.do_hybvar and 'gdas' in self.eupd_cdumps:
+        if self.do_hybvar and 'gdas' in self.eupd_runs:
             enkfgdas_tasks = hybrid_tasks + hybrid_after_eupd_tasks
             tasks['enkfgdas'] = enkfgdas_tasks
 
-        # Add CDUMP=gfs tasks if running early cycle
+        # Add RUN=gfs tasks if running early cycle
         if self.gfs_cyc > 0:
             tasks['gfs'] = gfs_tasks
 
-            if self.do_hybvar and 'gfs' in self.eupd_cdumps:
+            if self.do_hybvar and 'gfs' in self.eupd_runs:
                 enkfgfs_tasks = hybrid_tasks + hybrid_after_eupd_tasks
                 enkfgfs_tasks.remove("echgres")
+                enkfgfs_tasks.remove("esnowrecen")
                 tasks['enkfgfs'] = enkfgfs_tasks
 
         return tasks

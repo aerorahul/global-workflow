@@ -6,11 +6,18 @@
 echo "BEGIN: config.fcst"
 
 export USE_ESMF_THREADING="YES"  # Toggle to use ESMF-managed threading or traditional threading in UFSWM
+export COPY_FINAL_RESTARTS="NO" # Toggle to copy restarts from the end of GFS/GEFS Run (GDAS is handled seperately)
 
-# Turn off waves if not used for this CDUMP
-case ${WAVE_CDUMP} in
-  both | "${CDUMP/enkf}" ) ;; # Don't change
+# Turn off waves if not used for this RUN
+case ${WAVE_RUN} in
+  both | "${RUN/enkf}" ) ;; # Don't change
   *) DO_WAVE="NO" ;; # Turn waves off
+esac
+
+# Turn off aerosols if not used for this RUN
+case ${AERO_FCST_RUN} in
+  both | "${RUN/enkf}" ) ;; # Don't change
+  *) DO_AERO="NO" ;; # Turn aerosols off
 esac
 
 # Source model specific information that is resolution dependent
@@ -26,13 +33,19 @@ source "${EXPDIR}/config.ufs" ${string}
 # Forecast length for GFS forecast
 case ${RUN} in
   *gfs)
-    # shellcheck disable=SC2153
-    export FHMAX=${FHMAX_GFS}
+    # Convert comma-separated string into bash array
+    IFS=', ' read -ra segments <<< "${FCST_SEGMENTS}"
+    # Determine MIN and MAX based on the forecast segment
+    export FHMIN=${segments[${FCST_SEGMENT}]}
+    export FHMAX=${segments[${FCST_SEGMENT}+1]}
+    # Cap other FHMAX variables at FHMAX for the segment
+    export FHMAX_HF=$(( FHMAX_HF_GFS > FHMAX ? FHMAX : FHMAX_HF_GFS ))
+    export FHMAX_WAV=$(( FHMAX_WAV > FHMAX ? FHMAX : FHMAX_WAV ))
     # shellcheck disable=SC2153
     export FHOUT=${FHOUT_GFS}
-    export FHMAX_HF=${FHMAX_HF_GFS}
     export FHOUT_HF=${FHOUT_HF_GFS}
-    export FHOUT_OCNICE=${FHOUT_OCNICE_GFS}
+    export FHOUT_OCN=${FHOUT_OCN_GFS}
+    export FHOUT_ICE=${FHOUT_ICE_GFS}
     ;;
   *gdas)
     export FHMAX_HF=0
@@ -112,26 +125,19 @@ if (( gwd_opt == 2 )); then
     export do_ugwp_v0_orog_only=".false."
     export do_ugwp_v0_nst_only=".false."
     export do_gsl_drag_ls_bl=".true."
-    export do_gsl_drag_ss=".true."
+    export do_gsl_drag_ss=".false."
     export do_gsl_drag_tofd=".true."
+    export do_gwd_opt_psl=".true."    
     export do_ugwp_v1_orog_only=".false."
     launch_level=$(echo "${LEVS}/2.35" |bc)
     export launch_level
 fi
 
 # Sponge layer settings
-export tau=0.
-export rf_cutoff=10.
 export d2_bg_k1=0.20
 export d2_bg_k2=0.04
 export dz_min=6
 export n_sponge=42
-if (( LEVS == 128 )) && [[ "${CDUMP}" =~ "gdas" ]]; then
-   export tau=5.0
-   export rf_cutoff=1.0e3
-   export d2_bg_k1=0.20
-   export d2_bg_k2=0.0
-fi
 
 # PBL/turbulance schemes
 export hybedmf=".false."
@@ -203,6 +209,7 @@ case ${imp_physics} in
         export dt_inner=$((DELTIM/2))
         export sedi_semi=.true.
         if [[ "${sedi_semi}" == .true. ]]; then export dt_inner=${DELTIM} ; fi
+        if [[ dt_inner -gt 300 ]]; then export  dt_inner=300; fi
         export decfl=10
 
         export hord_mt_nh_nonmono=5
@@ -254,6 +261,9 @@ export DO_SKEB=${DO_SKEB:-"NO"}
 export DO_SHUM=${DO_SHUM:-"NO"}
 export DO_LAND_PERT=${DO_LAND_PERT:-"NO"}
 export DO_CA=${DO_CA:-"YES"}
+if [[ "${DO_NEST:-NO}" == "YES" ]] ; then
+  export DO_CA="NO"  # CA does not work with nesting.
+fi
 
 #coupling settings
 export cplmode="ufs.frac"
@@ -270,21 +280,18 @@ export FSICL="0"
 export FSICS="0"
 
 #---------------------------------------------------------------------
-if [[ "${CDUMP}" =~ "gdas" ]] ; then # GDAS cycle specific parameters
+if [[ "${RUN}" =~ "gdas" ]] ; then # GDAS cycle specific parameters
 
     # Variables used in DA cycling
     export DIAG_TABLE="${PARMgfs}/ufs/fv3/diag_table_da"
 
-    if [[ "${DOIAU}" == "YES" ]]; then
-      export restart_interval="3"
-    else
-      export restart_interval="6"
-    fi
+    # Write gfs restart files to rerun fcst from any break point
+    export restart_interval=${restart_interval_gdas:-6}
 
     # Turn on dry mass adjustment in GDAS
     export adjust_dry_mass=".true."
 
-elif [[ "${CDUMP}" =~ "gfs" ]] ; then # GFS cycle specific parameters
+elif [[ "${RUN}" =~ "gfs" ]] ; then # GFS cycle specific parameters
 
     # Write more variables to output
     export DIAG_TABLE="${PARMgfs}/ufs/fv3/diag_table"

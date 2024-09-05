@@ -20,6 +20,8 @@
 # 2020-06-10  J-Henrique Alves: Porting to R&D machine Hera
 # 2020-07-31  Jessica Meixner: Removing points, now gridded data only
 #
+# COM inputs:
+#
 # $Id$
 #
 # Attributes:
@@ -103,12 +105,12 @@ source "${USHgfs}/preamble.sh"
 
 # 1.a.1 Copy model definition files
   for grdID in ${waveGRD} ${wavepostGRD} ${waveinterpGRD}; do
-    if [[ -f "${COM_WAVE_PREP}/${RUN}wave.mod_def.${grdID}" ]]; then
+    if [[ -f "${COMIN_WAVE_PREP}/${RUN}wave.mod_def.${grdID}" ]]; then
       set +x
-      echo " Mod def file for ${grdID} found in ${COM_WAVE_PREP}. copying ...."
+      echo " Mod def file for ${grdID} found in ${COMIN_WAVE_PREP}. copying ...."
       set_trace
 
-      cp -f "${COM_WAVE_PREP}/${RUN}wave.mod_def.${grdID}" "mod_def.${grdID}"
+      cp -f "${COMIN_WAVE_PREP}/${RUN}wave.mod_def.${grdID}" "mod_def.${grdID}"
     fi
   done
 
@@ -231,6 +233,7 @@ source "${USHgfs}/preamble.sh"
     fhr=$FHMIN_WAV
   fi
   fhrg=$fhr
+  sleep_interval=10
   iwaitmax=120 # Maximum loop cycles for waiting until wave component output file is ready (fails after max)
   while [ $fhr -le $FHMAX_WAV ]; do
 
@@ -253,26 +256,20 @@ source "${USHgfs}/preamble.sh"
     export GRDIDATA=${DATA}/output_$YMDHMS
 
 # Gridded data (main part, need to be run side-by-side with forecast
-
+    
     if [ $fhr = $fhrg ]
     then
-      iwait=0
-      for wavGRD in ${waveGRD} ; do
-        gfile=${COM_WAVE_HISTORY}/${WAV_MOD_TAG}.out_grd.${wavGRD}.${YMD}.${HMS}
-        while [ ! -s ${gfile} ]; do sleep 10; let iwait=iwait+1; done
-        if [ $iwait -eq $iwaitmax ]; then
-          echo '*************************************************** '
-          echo " FATAL ERROR : NO RAW FIELD OUTPUT FILE out_grd.$grdID "
-          echo '*************************************************** '
-          echo ' '
-          set_trace
+      for wavGRD in ${waveGRD}; do
+        gfile="${COMIN_WAVE_HISTORY}/${WAV_MOD_TAG}.out_grd.${wavGRD}.${YMD}.${HMS}"
+        if ! wait_for_file "${gfile}" "${sleep_interval}" "${iwaitmax}"; then
+          echo " FATAL ERROR : NO RAW FIELD OUTPUT FILE out_grd.${grdID}"
           echo "${WAV_MOD_TAG} post ${grdID} ${PDY} ${cycle} : field output missing."
-          err=3; export err;${errchk}
-          exit $err
+          err=3; export err; "${errchk}"
+          exit "${err}"
         fi
-        ${NLN} ${gfile} ./out_grd.${wavGRD}
+        ${NLN} "${gfile}" "./out_grd.${wavGRD}"
       done
-
+      
       if [ "$DOGRI_WAV" = 'YES' ]
       then
         nigrd=1
@@ -287,6 +284,7 @@ source "${USHgfs}/preamble.sh"
               glo_15mxt) GRDNAME='global' ; GRDRES=0p25 ; GRIDNR=255  ; MODNR=11 ;;
               reg025) GRDNAME='global' ; GRDRES=0p25 ; GRIDNR=255  ; MODNR=11 ;;
               glo_025) GRDNAME='global' ; GRDRES=0p25 ; GRIDNR=255  ; MODNR=11 ;;
+              glo_100) GRDNAME='global' ; GRDRES=1p00 ; GRIDNR=255  ; MODNR=11 ;;
               glo_200) GRDNAME='global' ; GRDRES=2p00 ; GRIDNR=255  ; MODNR=11 ;;
               glo_500) GRDNAME='global' ; GRDRES=5p00 ; GRIDNR=255  ; MODNR=11 ;;
               glo_30mxt) GRDNAME='global' ; GRDRES=0p50 ; GRIDNR=255  ; MODNR=11 ;;
@@ -321,7 +319,8 @@ source "${USHgfs}/preamble.sh"
               glo_15mxt) GRDNAME='global' ; GRDRES=0p25 ; GRIDNR=255  ; MODNR=11   ;;
               reg025) GRDNAME='global' ; GRDRES=0p25 ; GRIDNR=255  ; MODNR=11   ;;
               glo_025) GRDNAME='global' ; GRDRES=0p25 ; GRIDNR=255  ; MODNR=11 ;;
-              glo_200) GRDNAME='global' ; GRDRES=2p00 ; GRIDNR=255  ; MODNR=11 ;;
+              glo_100) GRDNAME='global' ; GRDRES=1p00 ; GRIDNR=255  ; MODNR=11 ;;
+	      glo_200) GRDNAME='global' ; GRDRES=2p00 ; GRIDNR=255  ; MODNR=11 ;;
               glo_500) GRDNAME='global' ; GRDRES=5p00 ; GRIDNR=255  ; MODNR=11 ;;
               gwes_30m) GRDNAME='global' ; GRDRES=0p50 ; GRIDNR=255  ; MODNR=10 ;;
           esac
@@ -407,7 +406,7 @@ source "${USHgfs}/preamble.sh"
       ENSTAG=""
       if [ ${waveMEMB} ]; then ENSTAG=".${membTAG}${waveMEMB}" ; fi
       gribchk="${RUN}wave.${cycle}${ENSTAG}.${GRDNAME}.${GRDRES}.f${FH3}.grib2"
-      if [ ! -s ${COM_WAVE_GRID}/${gribchk} ]; then
+      if [ ! -s ${COMOUT_WAVE_GRID}/${gribchk} ]; then
         set +x
         echo ' '
         echo '********************************************'

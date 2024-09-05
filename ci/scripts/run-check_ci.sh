@@ -64,7 +64,7 @@ while true; do
   rocotorun -v "${ROCOTO_VERBOSE:-0}" -w "${xml}" -d "${db}"
 
   # Wait before running rocotostat
-  sleep 10
+  sleep 60
 
   # Get job statistics
   echo "Gather Rocoto statistics"
@@ -101,9 +101,7 @@ while true; do
 
   if [[ "${ROCOTO_STATE}" == "DONE" ]]; then
     {
-      echo "Experiment ${pslot} Completed ${CYCLES_DONE} Cycles at $(date)" || true
-      echo "with ${SUCCEEDED} successfully completed jobs" || true
-      echo "Experiment ${pslot} Completed: *SUCCESS*"
+      echo "Experiment ${pslot} Completed ${CYCLES_DONE} Cycles: *SUCCESS* at $(date)" || true
     } | tee -a "${run_check_logfile}"
     rc=0
     break
