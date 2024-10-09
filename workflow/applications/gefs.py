@@ -17,7 +17,7 @@ class GEFSAppConfig(AppConfig):
         """
         Returns the config_files that are involved in gefs
         """
-        configs = ['stage_ic', 'fcst', 'atmos_products', 'arch']
+        configs = ['stage_ic', 'fcst', 'atmos_products', 'arch', 'cleanup']
 
         if self.nens > 0:
             configs += ['efcs', 'atmos_ensstat']
@@ -80,8 +80,8 @@ class GEFSAppConfig(AppConfig):
             tasks += ['wavepostpnt']
 
         if self.do_extractvars:
-            tasks += ['extractvars']
+            tasks += ['extractvars', 'arch']
 
-        tasks += ['arch']
+        tasks += ['cleanup']
 
         return {f"{self.run}": tasks}
