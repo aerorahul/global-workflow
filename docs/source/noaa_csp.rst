@@ -408,7 +408,7 @@ or accessing the cluster from your web terminal, you can start to clone, compile
 
       HPC_ACCOUNT=${USER} pslot=c48atm RUNTESTS=/lustre/$USER/run \
           ./workflow/create_experiment.py \
-          --yaml ci/cases/pr/C48_ATM.yaml
+          --yaml dev/ci/cases/pr/C48_ATM.yaml
 
       cd /lustre/$USER/run/EXPDIR/c48atm
       crontab c48atm.crontab

@@ -179,4 +179,4 @@ versions/run.ver
 # jcb checkout and symlinks
 ush/python/jcb
 workflow/jcb
-ci/scripts/jcb
+dev/ci/scripts/jcb

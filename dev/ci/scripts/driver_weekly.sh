@@ -8,11 +8,11 @@ set -eux
 #
 # Abstract:
 #
-# This script runs the high resolution cases found in ${HOMEgfs}/ci/cases/weekly
+# This script runs the high resolution cases found in ${HOMEgfs}/dev/ci/cases/weekly
 # from the develop branch for the global-workflow repo that are intended to run on a weekly basis
 # from a cron job. When run it will clone and build a new branch from the EMC's global-workflow and
 # and create a pr using GitHub CLI by moving and replacing the yaml case files in
-# ${HOMEgfs}/ci/cases/weekly to {HOMEgfs}/ci/cases/pr.  Then the requisite labels are added
+# ${HOMEgfs}/dev/ci/cases/weekly to {HOMEgfs}/dev/ci/cases/pr.  Then the requisite labels are added
 # so that the current BASH CI framework can then run these cases.  Since this script
 # creates a PR with the CI-Ready labels, the BASH CI framework will automatically run these cases
 # from that point so it is only required to run this script once from a single machine.
@@ -40,7 +40,7 @@ source "${ROOT_DIR}/ush/detect_machine.sh"
 case ${MACHINE_ID} in
   hera | orion | hercules | wcoss2 | gaea)
     echo "Running Automated Testing on ${MACHINE_ID}"
-    source "${ROOT_DIR}/ci/platforms/config.${MACHINE_ID}"
+    source "${ROOT_DIR}/dev/ci/platforms/config.${MACHINE_ID}"
     ;;
   *)
     echo "Unsupported platform. Exiting with error."
@@ -71,15 +71,15 @@ cd global-workflow || exit 1
 git checkout -b "${branch}"
 
 ######################################################
-# move yaml files from ci/cases/weekly to ci/cases/pr
+# move yaml files from dev/ci/cases/weekly to dev/ci/cases/pr
 # and push new branch for PR weekly CI tests to GitHub
 REPO_OWNER="emcbot"
 REPO_NAME="global-workflow"
 REMOTE_NAME="${REPO_OWNER}"
 
-rm -Rf ci/cases/pr
-mv ci/cases/weekly ci/cases/pr
-git add ci/cases
+rm -Rf dev/ci/cases/pr
+mv dev/ci/cases/weekly dev/ci/cases/pr
+git add dev/ci/cases
 git commit -m "Moved weekly cases files into pr for high resolution testing"
 
 git remote add "${REMOTE_NAME}" "git@github.com:${REPO_OWNER}/${REPO_NAME}.git"
